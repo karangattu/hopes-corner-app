@@ -14,6 +14,7 @@ import CompactShowerList from './CompactShowerList';
 import { ShowerDetailModal } from './ShowerDetailModal';
 import { SlotBlockModal } from '../admin/SlotBlockModal';
 import { EndServiceDayPanel } from './EndServiceDayPanel';
+import { ServiceDatePicker } from './ServiceDatePicker';
 import { LayoutGrid, List, Settings } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
@@ -22,26 +23,36 @@ export function ShowersSection() {
     const { guests } = useGuestsStore();
     const { data: session } = useSession();
 
+    const today = todayPacificDateString();
+    const [selectedDate, setSelectedDate] = useState(today);
     const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'waitlist'>('active');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [selectedShower, setSelectedShower] = useState<any>(null);
     const [showSlotManager, setShowSlotManager] = useState(false);
 
-    const today = todayPacificDateString();
-    const todaysRecords = showerRecords.filter(
-        (r) => pacificDateStringFrom(r.date) === today
-    );
-
-    const activeShowers = todaysRecords.filter(r => r.status === 'booked' || r.status === 'awaiting');
-    const completedShowers = todaysRecords.filter(r => r.status === 'done');
-    const waitlistedShowers = todaysRecords.filter(r => r.status === 'waitlisted');
-    const pendingShowers = todaysRecords.filter(r => r.status !== 'done' && r.status !== 'cancelled');
-
-    const currentList = activeTab === 'active' ? activeShowers : activeTab === 'completed' ? completedShowers : waitlistedShowers;
-
     // Check if user is admin/staff
     const userRole = (session?.user as any)?.role || '';
     const isAdmin = ['admin', 'board', 'staff'].includes(userRole);
+
+    // Check if viewing historical data
+    const isViewingPast = selectedDate !== today;
+
+    // Filter records for selected date
+    const selectedDateRecords = showerRecords.filter(
+        (r) => pacificDateStringFrom(r.date) === selectedDate
+    );
+
+    const activeShowers = selectedDateRecords.filter(r => r.status === 'booked' || r.status === 'awaiting');
+    const completedShowers = selectedDateRecords.filter(r => r.status === 'done');
+    const waitlistedShowers = selectedDateRecords.filter(r => r.status === 'waitlisted');
+    
+    // For today only - pending showers for end-of-day cancellation
+    const todaysRecords = showerRecords.filter(
+        (r) => pacificDateStringFrom(r.date) === today
+    );
+    const pendingShowers = todaysRecords.filter(r => r.status !== 'done' && r.status !== 'cancelled');
+
+    const currentList = activeTab === 'active' ? activeShowers : activeTab === 'completed' ? completedShowers : waitlistedShowers;
 
     const handleEndShowerDay = async () => {
         if (pendingShowers.length === 0) {
@@ -66,36 +77,62 @@ export function ShowersSection() {
 
     return (
         <div className="space-y-6">
-            {/* End Service Day Panel */}
-            <EndServiceDayPanel
-                showShower={true}
-                showLaundry={false}
-                pendingShowerCount={pendingShowers.length}
-                onEndShowerDay={handleEndShowerDay}
-                onEndLaundryDay={async () => { }}
-                isAdmin={isAdmin}
-            />
+            {/* Historical Data Warning Banner */}
+            {isViewingPast && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                    <div>
+                        <p className="text-sm font-bold text-amber-800">Viewing Historical Data</p>
+                        <p className="text-xs text-amber-600">
+                            You are viewing shower records from {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}. 
+                            Actions are disabled in history view.
+                        </p>
+                    </div>
+                </div>
+            )}
 
-            <div className="flex items-center justify-between">
-                {/* Tab Navigation */}
-                <div className="flex p-1 bg-gray-100 rounded-2xl w-fit">
-                    {(['active', 'completed', 'waitlist'] as const).map((tab) => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={cn(
-                                'px-6 py-2.5 rounded-xl text-sm font-black transition-all capitalize',
-                                activeTab === tab
-                                    ? 'bg-white text-sky-600 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
-                            )}
-                        >
-                            {tab}
-                            <span className="ml-2 text-[10px] opacity-60">
-                                ({tab === 'active' ? activeShowers.length : tab === 'completed' ? completedShowers.length : waitlistedShowers.length})
-                            </span>
-                        </button>
-                    ))}
+            {/* End Service Day Panel - Only show for today */}
+            {!isViewingPast && (
+                <EndServiceDayPanel
+                    showShower={true}
+                    showLaundry={false}
+                    pendingShowerCount={pendingShowers.length}
+                    onEndShowerDay={handleEndShowerDay}
+                    onEndLaundryDay={async () => { }}
+                    isAdmin={isAdmin}
+                />
+            )}
+
+            <div className="flex items-center justify-between flex-wrap gap-4">
+                {/* Left side: Date picker + Tab Navigation */}
+                <div className="flex items-center gap-4 flex-wrap">
+                    {/* Date Picker for time travel */}
+                    <ServiceDatePicker
+                        selectedDate={selectedDate}
+                        onDateChange={setSelectedDate}
+                        isAdmin={isAdmin}
+                    />
+
+                    {/* Tab Navigation */}
+                    <div className="flex p-1 bg-gray-100 rounded-2xl w-fit">
+                        {(['active', 'completed', 'waitlist'] as const).map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={cn(
+                                    'px-6 py-2.5 rounded-xl text-sm font-black transition-all capitalize',
+                                    activeTab === tab
+                                        ? 'bg-white text-sky-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                )}
+                            >
+                                {tab}
+                                <span className="ml-2 text-[10px] opacity-60">
+                                    ({tab === 'active' ? activeShowers.length : tab === 'completed' ? completedShowers.length : waitlistedShowers.length})
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Right side actions */}
@@ -152,6 +189,7 @@ export function ShowersSection() {
                                     record={record}
                                     guest={guests.find(g => g.id === record.guestId)}
                                     onClick={() => handleGuestClick(record.guestId, record.id)}
+                                    readOnly={isViewingPast}
                                 />
                             ))
                         ) : (
@@ -188,11 +226,12 @@ export function ShowersSection() {
     );
 }
 
-function ShowerListItem({ record, guest, onClick }: { record: any, guest: any, onClick?: () => void }) {
+function ShowerListItem({ record, guest, onClick, readOnly = false }: { record: any, guest: any, onClick?: () => void, readOnly?: boolean }) {
     const [isUpdating, setIsUpdating] = useState(false);
     const { deleteShowerRecord, updateShowerStatus } = useServicesStore();
 
     const handleCancel = async () => {
+        if (readOnly) return;
         if (!window.confirm('Are you sure you want to cancel this shower?')) return;
         setIsUpdating(true);
         try {
@@ -206,6 +245,7 @@ function ShowerListItem({ record, guest, onClick }: { record: any, guest: any, o
     };
 
     const handleStatusUpdate = async (newStatus: string) => {
+        if (readOnly) return;
         setIsUpdating(true);
         try {
             await updateShowerStatus(record.id, newStatus);
@@ -268,7 +308,7 @@ function ShowerListItem({ record, guest, onClick }: { record: any, guest: any, o
             </div>
 
             <div className="flex items-center gap-2 mt-auto">
-                {record.status !== 'done' && (
+                {record.status !== 'done' && !readOnly && (
                     <>
                         <button
                             disabled={isUpdating}
@@ -290,7 +330,7 @@ function ShowerListItem({ record, guest, onClick }: { record: any, guest: any, o
                         </button>
                     </>
                 )}
-                {record.status === 'done' && (
+                {record.status === 'done' && !readOnly && (
                     <button
                         disabled={isUpdating}
                         onClick={() => handleStatusUpdate('booked')}

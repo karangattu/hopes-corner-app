@@ -13,6 +13,7 @@ import CompactLaundryList from './CompactLaundryList';
 import { LayoutGrid, List, Settings } from 'lucide-react';
 import { SlotBlockModal } from '../admin/SlotBlockModal';
 import { EndServiceDayPanel } from './EndServiceDayPanel';
+import { ServiceDatePicker } from './ServiceDatePicker';
 import { useSession } from 'next-auth/react';
 
 const STATUS_COLUMNS = [
@@ -61,29 +62,44 @@ export function LaundrySection() {
     const { data: session } = useSession();
 
     const today = todayPacificDateString();
-
-    // Filter for today's records + any past records that are not completed (pending pickup/active)
-    const activeLaundry = laundryRecords.filter(r => {
-        const recordDate = pacificDateStringFrom(r.date);
-        const isToday = recordDate === today;
-        const isPast = recordDate < today;
-
-        // Active statuses are anything NOT in this list
-        const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
-        const isActive = !completedStatuses.has(r.status);
-
-        return isToday || (isPast && isActive);
-    });
-
-    const onsiteLaundry = activeLaundry.filter(r => r.laundryType === 'onsite' || !r.laundryType);
-    const offsiteLaundry = activeLaundry.filter(r => r.laundryType === 'offsite');
-
-    // Calculate pending on-site laundry for End Service Day (only 'waiting' status)
-    const pendingOnsiteLaundry = onsiteLaundry.filter(r => r.status === 'waiting');
+    const [selectedDate, setSelectedDate] = useState(today);
 
     // Check if user is admin/staff
     const userRole = (session?.user as any)?.role || '';
     const isAdmin = ['admin', 'board', 'staff'].includes(userRole);
+
+    // Check if viewing historical data
+    const isViewingPast = selectedDate !== today;
+
+    // Filter logic depends on whether viewing historical data or current
+    const activeLaundry = useMemo(() => {
+        if (isViewingPast) {
+            // When viewing past, show all records from that specific date
+            return laundryRecords.filter(r => pacificDateStringFrom(r.date) === selectedDate);
+        }
+        
+        // Current view: today's records + any past records that are not completed (pending pickup/active)
+        return laundryRecords.filter(r => {
+            const recordDate = pacificDateStringFrom(r.date);
+            const isToday = recordDate === today;
+            const isPast = recordDate < today;
+
+            // Active statuses are anything NOT in this list
+            const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
+            const isActive = !completedStatuses.has(r.status);
+
+            return isToday || (isPast && isActive);
+        });
+    }, [laundryRecords, selectedDate, isViewingPast, today]);
+
+    const onsiteLaundry = activeLaundry.filter(r => r.laundryType === 'onsite' || !r.laundryType);
+    const offsiteLaundry = activeLaundry.filter(r => r.laundryType === 'offsite');
+
+    // Calculate pending on-site laundry for End Service Day (only 'waiting' status, only for today)
+    const todaysRecords = laundryRecords.filter(r => pacificDateStringFrom(r.date) === today);
+    const pendingOnsiteLaundry = todaysRecords.filter(r => 
+        (r.laundryType === 'onsite' || !r.laundryType) && r.status === 'waiting'
+    );
 
     const handleEndLaundryDay = async () => {
         if (pendingOnsiteLaundry.length === 0) {
@@ -136,7 +152,7 @@ export function LaundrySection() {
 
     // Handle status change with bag number validation
     const handleStatusChange = useCallback(async (record: any, newStatus: string) => {
-        if (!record) return;
+        if (!record || isViewingPast) return;
 
         // Check if we need to prompt for bag number
         if (requiresBagPrompt(record, newStatus)) {
@@ -161,17 +177,21 @@ export function LaundrySection() {
         } catch {
             toast.error('Failed to update status');
         }
-    }, [requiresBagPrompt, updateLaundryBagNumber, updateLaundryStatus]);
+    }, [requiresBagPrompt, updateLaundryBagNumber, updateLaundryStatus, isViewingPast]);
 
-    // Drag handlers
+    // Drag handlers - disabled when viewing historical data
     const handleDragStart = useCallback((e: React.DragEvent, record: any) => {
+        if (isViewingPast) {
+            e.preventDefault();
+            return;
+        }
         draggedItemRef.current = record;
         setDraggedItem(record);
         e.dataTransfer.effectAllowed = 'move';
         if (typeof e.dataTransfer.setDragImage === 'function') {
             e.dataTransfer.setDragImage(e.currentTarget as Element, 0, 0);
         }
-    }, []);
+    }, [isViewingPast]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -205,34 +225,62 @@ export function LaundrySection() {
 
     return (
         <div className="space-y-8">
-            {/* End Service Day Panel */}
-            <EndServiceDayPanel
-                showShower={false}
-                showLaundry={true}
-                pendingLaundryCount={pendingOnsiteLaundry.length}
-                onEndShowerDay={async () => { }}
-                onEndLaundryDay={handleEndLaundryDay}
-                isAdmin={isAdmin}
-            />
+            {/* Historical Data Warning Banner */}
+            {isViewingPast && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                    <div>
+                        <p className="text-sm font-bold text-amber-800">Viewing Historical Data</p>
+                        <p className="text-xs text-amber-600">
+                            You are viewing laundry records from {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}. 
+                            Actions are disabled in history view.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* End Service Day Panel - Only show for today */}
+            {!isViewingPast && (
+                <EndServiceDayPanel
+                    showShower={false}
+                    showLaundry={true}
+                    pendingLaundryCount={pendingOnsiteLaundry.length}
+                    onEndShowerDay={async () => { }}
+                    onEndLaundryDay={handleEndLaundryDay}
+                    isAdmin={isAdmin}
+                />
+            )}
 
             {/* On-site Laundry Kanban */}
             <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-xl font-black text-gray-900 flex items-center gap-3">
-                            <WashingMachine className="text-purple-600" />
-                            {viewMode === 'list' ? 'Laundry Overview' : 'On-site Laundry - Kanban Board'}
-                        </h2>
-                        <p className="text-sm text-gray-500 font-medium">Drag and drop cards between columns to update status</p>
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                        {/* Date Picker for time travel */}
+                        <ServiceDatePicker
+                            selectedDate={selectedDate}
+                            onDateChange={setSelectedDate}
+                            isAdmin={isAdmin}
+                        />
+                        <div>
+                            <h2 className="text-xl font-black text-gray-900 flex items-center gap-3">
+                                <WashingMachine className="text-purple-600" />
+                                {viewMode === 'list' ? 'Laundry Overview' : 'On-site Laundry - Kanban Board'}
+                            </h2>
+                            <p className="text-sm text-gray-500 font-medium">
+                                {isViewingPast ? 'Historical view - read only' : 'Drag and drop cards between columns to update status'}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setShowSlotManager(true)}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg border hover:bg-gray-50 transition-colors text-sm font-medium"
-                        >
-                            <Settings className="w-4 h-4" />
-                            Manage Slots
-                        </button>
+                        {!isViewingPast && (
+                            <button
+                                onClick={() => setShowSlotManager(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg border hover:bg-gray-50 transition-colors text-sm font-medium"
+                            >
+                                <Settings className="w-4 h-4" />
+                                Manage Slots
+                            </button>
+                        )}
                         <div className="flex bg-gray-100 p-1 rounded-lg">
                             <button
                                 onClick={() => setViewMode('kanban')}
@@ -306,6 +354,7 @@ export function LaundrySection() {
                                                     onDragEnd={handleDragEnd}
                                                     onStatusChange={(newStatus) => handleStatusChange(record, newStatus)}
                                                     columns={STATUS_COLUMNS}
+                                                    readOnly={isViewingPast}
                                                 />
                                             ))}
                                             {columnRecords.length === 0 && (
@@ -387,6 +436,7 @@ export function LaundrySection() {
                                                     onStatusChange={(newStatus) => handleStatusChange(record, newStatus)}
                                                     columns={OFFSITE_STATUS_COLUMNS}
                                                     isOffsite
+                                                    readOnly={isViewingPast}
                                                 />
                                             ))}
                                             {columnRecords.length === 0 && (
@@ -423,9 +473,10 @@ interface LaundryCardProps {
     onStatusChange: (newStatus: string) => void;
     columns: typeof STATUS_COLUMNS;
     isOffsite?: boolean;
+    readOnly?: boolean;
 }
 
-function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd, onStatusChange, columns, isOffsite = false }: LaundryCardProps) {
+function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd, onStatusChange, columns, isOffsite = false, readOnly = false }: LaundryCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isEditingBag, setIsEditingBag] = useState(false);
     const [bagValue, setBagValue] = useState(record.bagNumber || '');
@@ -434,6 +485,7 @@ function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd,
     const isCompleted = record.status === 'picked_up' || record.status === 'offsite_picked_up';
 
     const handleSaveBag = async () => {
+        if (readOnly) return;
         try {
             await updateLaundryBagNumber(record.id, bagValue);
             setIsEditingBag(false);
@@ -445,12 +497,13 @@ function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd,
 
     return (
         <div
-            draggable
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
+            draggable={!readOnly}
+            onDragStart={readOnly ? undefined : onDragStart}
+            onDragEnd={readOnly ? undefined : onDragEnd}
             style={{ willChange: isDragging ? 'transform, opacity' : 'auto' }}
             className={cn(
-                "bg-white rounded-lg border-2 shadow-sm p-3 cursor-move transition-all hover:shadow-md",
+                "bg-white rounded-lg border-2 shadow-sm p-3 transition-all hover:shadow-md",
+                readOnly ? "cursor-default" : "cursor-move",
                 isDragging && "opacity-50 scale-105",
                 isCompleted ? "border-emerald-200 hover:border-emerald-300" : "border-gray-200 hover:border-gray-300"
             )}
@@ -533,7 +586,7 @@ function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd,
                                 <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wide">
                                     Bag Number
                                 </label>
-                                {isEditingBag ? (
+                                {isEditingBag && !readOnly ? (
                                     <div className="flex gap-1">
                                         <input
                                             type="text"
@@ -552,41 +605,47 @@ function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd,
                                         <span className={cn("text-xs font-medium", record.bagNumber ? "text-gray-900" : "text-gray-300 italic")}>
                                             {record.bagNumber || 'No Bag #'}
                                         </span>
-                                        <button onClick={() => setIsEditingBag(true)} className="text-[10px] text-blue-500 hover:underline">
-                                            Edit
-                                        </button>
+                                        {!readOnly && (
+                                            <button onClick={() => setIsEditingBag(true)} className="text-[10px] text-blue-500 hover:underline">
+                                                Edit
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
 
-                            <div>
-                                <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-                                    Status
-                                </label>
-                                <select
-                                    value={record.status}
-                                    onChange={(e) => onStatusChange(e.target.value)}
-                                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
-                                >
-                                    {columns.map((col) => (
-                                        <option key={col.id} value={col.id}>{col.title}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {!readOnly && (
+                                <>
+                                    <div>
+                                        <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+                                            Status
+                                        </label>
+                                        <select
+                                            value={record.status}
+                                            onChange={(e) => onStatusChange(e.target.value)}
+                                            className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-purple-400"
+                                        >
+                                            {columns.map((col) => (
+                                                <option key={col.id} value={col.id}>{col.title}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    if (confirm(`Cancel laundry booking for ${guestDetails.primaryName}?`)) {
-                                        deleteLaundryRecord(record.id);
-                                        toast.success('Laundry booking cancelled');
-                                    }
-                                }}
-                                className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded px-3 py-1.5 transition-colors"
-                            >
-                                <Trash2 size={12} />
-                                Cancel Booking
-                            </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (confirm(`Cancel laundry booking for ${guestDetails.primaryName}?`)) {
+                                                deleteLaundryRecord(record.id);
+                                                toast.success('Laundry booking cancelled');
+                                            }
+                                        }}
+                                        className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded px-3 py-1.5 transition-colors"
+                                    >
+                                        <Trash2 size={12} />
+                                        Cancel Booking
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
