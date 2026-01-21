@@ -381,5 +381,169 @@ describe('useGuestsStore', () => {
                 expect(result).toBe(false);
             });
         });
+
+        describe('checkGuestHasRecords', () => {
+            it('returns zero counts when guest has no records', async () => {
+                // Mock all select calls to return count: 0
+                mockSupabase.select.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ count: 0, error: null })
+                }));
+
+                const result = await useGuestsStore.getState().checkGuestHasRecords('g1');
+                
+                expect(result.total).toBe(0);
+                expect(result.meals).toBe(0);
+                expect(result.showers).toBe(0);
+                expect(result.laundry).toBe(0);
+                expect(result.haircuts).toBe(0);
+                expect(result.holidays).toBe(0);
+                expect(result.bicycleRepairs).toBe(0);
+                expect(result.itemsDistributed).toBe(0);
+            });
+
+            it('returns correct counts when guest has records', async () => {
+                // Create a mock that returns different counts for different tables
+                let callCount = 0;
+                const counts = [5, 2, 3, 1, 1, 2, 4]; // meals, showers, laundry, haircuts, holidays, bicycles, items
+                mockSupabase.select.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ count: counts[callCount++], error: null })
+                }));
+
+                const result = await useGuestsStore.getState().checkGuestHasRecords('g1');
+                
+                expect(result.total).toBe(18); // sum of all
+                expect(result.meals).toBe(5);
+                expect(result.showers).toBe(2);
+            });
+
+            it('handles null counts gracefully', async () => {
+                mockSupabase.select.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ count: null, error: null })
+                }));
+
+                const result = await useGuestsStore.getState().checkGuestHasRecords('g1');
+                
+                expect(result.total).toBe(0);
+            });
+        });
+
+        describe('transferGuestRecords', () => {
+            it('transfers all records successfully', async () => {
+                mockSupabase.update.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ error: null })
+                }));
+
+                const result = await useGuestsStore.getState().transferGuestRecords('from-guest', 'to-guest');
+                
+                expect(result).toBe(true);
+            });
+
+            it('returns false when transfer fails', async () => {
+                mockSupabase.update.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ error: { message: 'Transfer failed' } })
+                }));
+                const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+                const result = await useGuestsStore.getState().transferGuestRecords('from-guest', 'to-guest');
+                
+                expect(result).toBe(false);
+                spy.mockRestore();
+            });
+
+            it('handles exceptions gracefully', async () => {
+                mockSupabase.update.mockImplementation(() => ({
+                    eq: vi.fn().mockRejectedValue(new Error('Network error'))
+                }));
+                const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+                const result = await useGuestsStore.getState().transferGuestRecords('from-guest', 'to-guest');
+                
+                expect(result).toBe(false);
+                spy.mockRestore();
+            });
+        });
+
+        describe('deleteGuestWithTransfer', () => {
+            it('deletes guest without transfer when no target provided', async () => {
+                useGuestsStore.setState({ guests: [createMockGuest({ id: 'del-1' })] });
+                mockSupabase.eq.mockResolvedValue({ error: null });
+                mockSupabase.or.mockResolvedValue({ error: null });
+
+                const result = await useGuestsStore.getState().deleteGuestWithTransfer('del-1');
+                
+                expect(result).toBe(true);
+                expect(useGuestsStore.getState().guests).toHaveLength(0);
+            });
+
+            it('transfers records before deleting when target provided', async () => {
+                useGuestsStore.setState({ 
+                    guests: [
+                        createMockGuest({ id: 'del-1' }),
+                        createMockGuest({ id: 'target-1' })
+                    ] 
+                });
+                
+                // Mock transfer success
+                mockSupabase.update.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ error: null })
+                }));
+                mockSupabase.eq.mockResolvedValue({ error: null });
+                mockSupabase.or.mockResolvedValue({ error: null });
+
+                const result = await useGuestsStore.getState().deleteGuestWithTransfer('del-1', 'target-1');
+                
+                expect(result).toBe(true);
+                expect(useGuestsStore.getState().guests).toHaveLength(1);
+                expect(useGuestsStore.getState().guests[0].id).toBe('target-1');
+            });
+
+            it('does not delete guest if transfer fails', async () => {
+                useGuestsStore.setState({ 
+                    guests: [
+                        createMockGuest({ id: 'del-1' }),
+                        createMockGuest({ id: 'target-1' })
+                    ] 
+                });
+                
+                // Mock transfer failure
+                mockSupabase.update.mockImplementation(() => ({
+                    eq: vi.fn().mockResolvedValue({ error: { message: 'Transfer failed' } })
+                }));
+                const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+                const result = await useGuestsStore.getState().deleteGuestWithTransfer('del-1', 'target-1');
+                
+                expect(result).toBe(false);
+                expect(useGuestsStore.getState().guests).toHaveLength(2); // Guest not deleted
+                spy.mockRestore();
+            });
+
+            it('returns false when database delete fails', async () => {
+                useGuestsStore.setState({ guests: [createMockGuest({ id: 'del-1' })] });
+                mockSupabase.or.mockResolvedValue({ error: null });
+                mockSupabase.eq.mockResolvedValue({ error: { message: 'Delete failed' } });
+                const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+                const result = await useGuestsStore.getState().deleteGuestWithTransfer('del-1');
+                
+                expect(result).toBe(false);
+                spy.mockRestore();
+            });
+
+            it('removes guest proxies and warnings on delete', async () => {
+                useGuestsStore.setState({ 
+                    guests: [createMockGuest({ id: 'del-1' })],
+                    guestProxies: [{ id: 'p1', guestId: 'del-1', proxyId: 'other', createdAt: '' }],
+                    warnings: [{ id: 'w1', guestId: 'del-1', message: 'M', severity: 1, active: true, createdAt: '', updatedAt: '' }]
+                });
+                mockSupabase.eq.mockResolvedValue({ error: null });
+                mockSupabase.or.mockResolvedValue({ error: null });
+
+                await useGuestsStore.getState().deleteGuestWithTransfer('del-1');
+                
+                expect(useGuestsStore.getState().guestProxies).toHaveLength(0);
+                expect(useGuestsStore.getState().warnings).toHaveLength(0);
+            });
+        });
     });
 });

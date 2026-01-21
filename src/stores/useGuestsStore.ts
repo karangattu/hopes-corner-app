@@ -71,6 +71,17 @@ interface GuestWarning {
     updatedAt: string;
 }
 
+export interface GuestRecordCounts {
+    meals: number;
+    showers: number;
+    laundry: number;
+    haircuts: number;
+    holidays: number;
+    bicycleRepairs: number;
+    itemsDistributed: number;
+    total: number;
+}
+
 interface GuestsState {
     guests: Guest[];
     guestProxies: GuestProxy[];
@@ -78,6 +89,9 @@ interface GuestsState {
 
     syncGuests: (externalGuests: Guest[]) => void;
     addGuest: (guest: any) => Promise<Guest>;
+    checkGuestHasRecords: (guestId: string) => Promise<GuestRecordCounts>;
+    transferGuestRecords: (fromGuestId: string, toGuestId: string) => Promise<boolean>;
+    deleteGuestWithTransfer: (guestId: string, transferToGuestId?: string) => Promise<boolean>;
     updateGuest: (id: string, updates: any) => Promise<boolean>;
     removeGuest: (id: string) => Promise<void>;
     banGuest: (guestId: string, options: any) => Promise<boolean>;
@@ -278,6 +292,115 @@ export const useGuestsStore = create<GuestsState>()(
 
                     if (error) {
                         console.error('Failed to delete guest from Supabase:', error);
+                    }
+                },
+
+                checkGuestHasRecords: async (guestId) => {
+                    const supabase = createClient();
+                    
+                    // Query all related tables in parallel
+                    const [
+                        mealsResult,
+                        showersResult,
+                        laundryResult,
+                        haircutsResult,
+                        holidaysResult,
+                        bicycleResult,
+                        itemsResult
+                    ] = await Promise.all([
+                        supabase.from('meal_attendance').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('shower_reservations').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('laundry_bookings').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('haircut_visits').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('holiday_visits').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('bicycle_repairs').select('id', { count: 'exact', head: true }).eq('guest_id', guestId),
+                        supabase.from('items_distributed').select('id', { count: 'exact', head: true }).eq('guest_id', guestId)
+                    ]);
+
+                    const counts = {
+                        meals: mealsResult.count || 0,
+                        showers: showersResult.count || 0,
+                        laundry: laundryResult.count || 0,
+                        haircuts: haircutsResult.count || 0,
+                        holidays: holidaysResult.count || 0,
+                        bicycleRepairs: bicycleResult.count || 0,
+                        itemsDistributed: itemsResult.count || 0,
+                        total: 0
+                    };
+                    counts.total = counts.meals + counts.showers + counts.laundry + 
+                                   counts.haircuts + counts.holidays + counts.bicycleRepairs + counts.itemsDistributed;
+                    
+                    return counts;
+                },
+
+                transferGuestRecords: async (fromGuestId, toGuestId) => {
+                    const supabase = createClient();
+                    
+                    try {
+                        // Transfer all records from one guest to another
+                        const updates = await Promise.all([
+                            supabase.from('meal_attendance').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('shower_reservations').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('laundry_bookings').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('haircut_visits').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('holiday_visits').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('bicycle_repairs').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            supabase.from('items_distributed').update({ guest_id: toGuestId }).eq('guest_id', fromGuestId),
+                            // Also update meal pickups where this guest picked up meals for others
+                            supabase.from('meal_attendance').update({ picked_up_by_guest_id: toGuestId }).eq('picked_up_by_guest_id', fromGuestId)
+                        ]);
+
+                        // Check if any updates failed
+                        const hasErrors = updates.some(result => result.error);
+                        if (hasErrors) {
+                            console.error('Some record transfers failed:', updates.filter(r => r.error));
+                            return false;
+                        }
+
+                        return true;
+                    } catch (error) {
+                        console.error('Failed to transfer guest records:', error);
+                        return false;
+                    }
+                },
+
+                deleteGuestWithTransfer: async (guestId, transferToGuestId) => {
+                    const supabase = createClient();
+                    
+                    try {
+                        // If a transfer target is provided, transfer records first
+                        if (transferToGuestId) {
+                            const transferSuccess = await get().transferGuestRecords(guestId, transferToGuestId);
+                            if (!transferSuccess) {
+                                toast.error('Failed to transfer guest records. Guest not deleted.');
+                                return false;
+                            }
+                        }
+
+                        // Now delete the guest (this will cascade to proxies and warnings)
+                        set((state) => {
+                            state.guests = state.guests.filter((g) => g.id !== guestId);
+                            state.guestProxies = state.guestProxies.filter(p => p.guestId !== guestId && p.proxyId !== guestId);
+                            state.warnings = state.warnings.filter(w => w.guestId !== guestId);
+                        });
+                        clearSearchIndexCache();
+
+                        // Cleanup related data in Supabase
+                        await supabase.from('guest_proxies').delete().or(`guest_id.eq.${guestId},proxy_id.eq.${guestId}`);
+                        await supabase.from('guest_warnings').delete().eq('guest_id', guestId);
+                        const { error } = await supabase.from('guests').delete().eq('id', guestId);
+
+                        if (error) {
+                            console.error('Failed to delete guest from Supabase:', error);
+                            toast.error('Failed to delete guest from database.');
+                            return false;
+                        }
+
+                        return true;
+                    } catch (error) {
+                        console.error('Error in deleteGuestWithTransfer:', error);
+                        toast.error('An error occurred while deleting the guest.');
+                        return false;
                     }
                 },
 

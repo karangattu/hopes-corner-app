@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, User, Loader2, Bike } from 'lucide-react';
+import { X, User, Loader2, Bike, Trash2 } from 'lucide-react';
 import { useGuestsStore } from '@/stores/useGuestsStore';
+import { GuestDeleteWithTransferModal } from './GuestDeleteWithTransferModal';
 import toast from 'react-hot-toast';
 
 interface GuestEditModalProps {
@@ -26,6 +27,7 @@ const toTitleCase = (str: string) => {
 export function GuestEditModal({ guest, onClose }: GuestEditModalProps) {
     const { updateGuest } = useGuestsStore();
     const [isPending, setIsPending] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [formData, setFormData] = useState({
         firstName: guest.firstName || '',
         lastName: guest.lastName || '',
@@ -246,26 +248,46 @@ export function GuestEditModal({ guest, onClose }: GuestEditModalProps) {
                 </form>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3">
+                <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => setShowDeleteModal(true)}
                         disabled={isPending}
-                        className="px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-200 transition-all disabled:opacity-50"
+                        className="px-4 py-2.5 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 border-2 border-red-200 hover:border-red-300 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
-                        Cancel
+                        <Trash2 size={16} />
+                        Delete Guest
                     </button>
-                    <button
-                        type="submit"
-                        onClick={handleSubmit}
-                        disabled={isPending}
-                        className="px-6 py-2.5 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:opacity-50 flex items-center gap-2"
-                    >
-                        {isPending && <Loader2 size={16} className="animate-spin" />}
-                        Save Changes
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={isPending}
+                            className="px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-200 transition-all disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            onClick={handleSubmit}
+                            disabled={isPending}
+                            className="px-6 py-2.5 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isPending && <Loader2 size={16} className="animate-spin" />}
+                            Save Changes
+                        </button>
+                    </div>
                 </div>
             </motion.div>
+
+            {/* Delete Modal */}
+            {showDeleteModal && (
+                <GuestDeleteWithTransferModal
+                    guest={guest}
+                    onClose={() => setShowDeleteModal(false)}
+                    onDeleted={onClose}
+                />
+            )}
         </div>
     );
 }
