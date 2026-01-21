@@ -5,22 +5,25 @@
  * Use pre-computed search index for O(1) lookups
  */
 
-import { createSearchIndex, searchWithIndex, getCachedNameParts } from './guestSearchIndex.js';
+import { createSearchIndex, searchWithIndex, getCachedNameParts, SearchIndex, SearchGuest } from './guestSearchIndex';
 
 // Cache for the search index with content-aware invalidation
-let cachedIndex = null;
-let cachedGuestsRef = null;
+// Using 'any' for the cache to support different guest types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedIndex: SearchIndex<any> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cachedGuestsRef: any[] | null = null;
 let cachedGuestCount = 0;
-let cachedGuestIdSet = new Set();
+let cachedGuestIdSet = new Set<string>();
 
 /**
  * Get or create the search index for a guests list
  * Uses both reference equality and content-based comparison to detect when guests array changes
  * This prevents stale cache issues when guests are added/modified but array reference doesn't change
- * @param {Array} guests - Array of guest objects
- * @returns {Object} Search index
+ * @param guests - Array of guest objects
+ * @returns Search index
  */
-const getSearchIndex = (guests) => {
+const getSearchIndex = <T extends SearchGuest>(guests: T[]): SearchIndex<T> => {
   // Quick check: if reference is the same AND guest count matches, likely still valid
   const currentGuestCount = guests.length;
   const isSameRef = cachedGuestsRef === guests;
@@ -44,7 +47,7 @@ const getSearchIndex = (guests) => {
 
     // If IDs match, cache is still valid
     if (allIdsMatch) {
-      return cachedIndex;
+      return cachedIndex as SearchIndex<T>;
     }
 
     // IDs don't match - cache is stale, rebuild below
@@ -58,13 +61,13 @@ const getSearchIndex = (guests) => {
   cachedGuestCount = currentGuestCount;
   cachedGuestIdSet = new Set(guests.map(g => g.id));
 
-  return cachedIndex;
+  return cachedIndex as SearchIndex<T>;
 };
 
 /**
  * Clear the search index cache (useful for testing)
  */
-export const clearSearchIndexCache = () => {
+export const clearSearchIndexCache = (): void => {
   cachedIndex = null;
   cachedGuestsRef = null;
 };
@@ -90,15 +93,24 @@ export const extractNameParts = (firstName = "", lastName = "") => {
   };
 };
 
+interface ExtractedNameParts {
+  firstName: string;
+  lastName: string;
+  firstNameParts: string[];
+  allTokens: string[];
+  fullName: string;
+  fullNameNoSpaces: string;
+}
+
 /**
  * Check if a search query matches any combination of name parts
- * @param {string} query - Normalized search query
- * @param {Object} nameParts - Result from extractNameParts
- * @returns {number} Rank score (lower is better match, 99 = no match)
+ * @param query - Normalized search query
+ * @param nameParts - Result from extractNameParts
+ * @returns Rank score (lower is better match, 99 = no match)
  */
-export const scoreNameMatch = (query, nameParts) => {
+export const scoreNameMatch = (query: string, nameParts: ExtractedNameParts): number => {
   const { allTokens, fullName } = nameParts;
-  const queryTokens = query.split(/\s+/).filter((t) => t.length > 0);
+  const queryTokens = query.split(/\s+/).filter((t: string) => t.length > 0);
 
   if (queryTokens.length === 0) return 99;
 
@@ -214,17 +226,22 @@ export const scoreNameMatch = (query, nameParts) => {
  * Filter and rank guests by flexible name search
  * Use pre-computed search index for fast lookups
  * 
- * @param {string} searchQuery - Raw search query
- * @param {Array} guests - Array of guest objects
- * @returns {Array} Sorted array of guests matching the query (deduplicated)
+ * @param searchQuery - Raw search query
+/**
+ * Filter and rank guests by flexible name search
+ * Use pre-computed search index for fast lookups
+ * 
+ * @param searchQuery - Raw search query
+ * @param guests - Array of guest objects
+ * @returns Sorted array of guests matching the query (deduplicated)
  */
-export const flexibleNameSearch = (searchQuery, guests) => {
+export const flexibleNameSearch = <T extends SearchGuest>(searchQuery: string, guests: T[]): T[] => {
   const queryRaw = searchQuery.trim();
   if (!queryRaw) return [];
   if (!guests || guests.length === 0) return [];
 
   const query = queryRaw.toLowerCase().replace(/\s+/g, " ");
-  const queryTokens = query.split(" ").filter((t) => t.length > 0);
+  const queryTokens = query.split(" ").filter((t: string) => t.length > 0);
 
   if (queryTokens.length === 0) return [];
 
@@ -238,27 +255,27 @@ export const flexibleNameSearch = (searchQuery, guests) => {
   }
 
   // For smaller lists, use the original algorithm (simpler, no index overhead)
-  const guestMap = new Map();
+  const guestMap = new Map<string, T>();
 
   const scored = guests
-    .map((guest) => {
+    .map((guest: T) => {
       const nameParts = extractNameParts(guest.firstName, guest.lastName);
       const preferredName = (guest.preferredName || "").trim().toLowerCase();
 
       let rank = 99;
-      let label = guest.preferredName || guest.name || nameParts.fullName || "Unknown";
+      let label: string = guest.preferredName || guest.name || nameParts.fullName || "Unknown";
 
       // Check preferred name first (highest priority)
       if (preferredName) {
         if (preferredName === query) {
           rank = -1;
-          label = guest.preferredName;
+          label = guest.preferredName || label;
         } else if (preferredName.startsWith(query)) {
           rank = Math.min(rank, 0);
-          label = guest.preferredName;
+          label = guest.preferredName || label;
         } else if (query.length >= 3 && preferredName.includes(query)) {
           rank = Math.min(rank, 1);
-          label = guest.preferredName;
+          label = guest.preferredName || label;
         }
       }
 
@@ -295,14 +312,14 @@ export const flexibleNameSearch = (searchQuery, guests) => {
 /**
  * Get all searchable name tokens for a guest
  * Useful for debugging and understanding what parts are searchable
- * @param {Object} guest - Guest object
- * @returns {Array} Array of searchable tokens
+ * @param guest - Guest object
+ * @returns Array of searchable tokens
  */
-export const getSearchableTokens = (guest) => {
+export const getSearchableTokens = (guest: SearchGuest): string[] => {
   const nameParts = extractNameParts(guest.firstName, guest.lastName);
   const tokens = new Set([
     ...nameParts.allTokens,
     guest.preferredName?.toLowerCase().trim(),
   ]);
-  return Array.from(tokens).filter((t) => t && t.length > 0);
+  return Array.from(tokens).filter((t): t is string => typeof t === 'string' && t.length > 0);
 };

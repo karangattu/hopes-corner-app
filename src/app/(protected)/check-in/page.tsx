@@ -332,13 +332,13 @@ export default function CheckInPage() {
                                 <div className="mt-8 w-full max-w-md">
                                     <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Did you mean?</p>
                                     <div className="flex flex-wrap justify-center gap-2">
-                                        {fuzzySuggestions.filter((s) => s && s.guest).map((suggestion) => (
+                                        {fuzzySuggestions.map((suggestion) => (
                                             <button
-                                                key={suggestion.guest.id}
-                                                onClick={() => setSearchQuery(suggestion.guest.preferredName || suggestion.guest.name)}
+                                                key={suggestion.id}
+                                                onClick={() => setSearchQuery(suggestion.preferredName || suggestion.name || '')}
                                                 className="px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-bold hover:bg-amber-100 transition-all active:scale-95"
                                             >
-                                                {suggestion.guest.preferredName || suggestion.guest.name}
+                                                {suggestion.preferredName || suggestion.name}
                                             </button>
                                         ))}
                                     </div>
@@ -414,7 +414,7 @@ export default function CheckInPage() {
                             {isLargeList ? (
                                 // Non-animated list for large result sets (better performance)
                                 <div className="grid grid-cols-1 gap-4">
-                                    {sortedGuests.filter((g) => g && g.id).map((guest, index: number) => (
+                                    {sortedGuests.filter((g: Guest) => g && g.id).map((guest: Guest, index: number) => (
                                         <div
                                             key={guest.id}
                                             className={cn(
@@ -440,7 +440,7 @@ export default function CheckInPage() {
                                 // Animated list for small result sets
                                 <div className="grid grid-cols-1 gap-4">
                                     <AnimatePresence>
-                                        {sortedGuests.filter((g) => g && g.id).map((guest, index: number) => (
+                                        {sortedGuests.filter((g: Guest) => g && g.id).map((guest: Guest, index: number) => (
                                             <motion.div
                                                 key={guest.id}
                                                 initial={{ opacity: 0, y: 20 }}

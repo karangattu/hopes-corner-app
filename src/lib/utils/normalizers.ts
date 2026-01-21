@@ -5,7 +5,7 @@ const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
 const GMT_OFFSET_REGEX = /^GMT([+-])(\d{1,2})(?::(\d{2}))?$/;
 
-const parseGmtOffsetMinutes = (value) => {
+const parseGmtOffsetMinutes = (value: string | null | undefined): number => {
   if (!value) return 0;
   const match = GMT_OFFSET_REGEX.exec(value.trim());
   if (!match) return 0;
@@ -16,7 +16,7 @@ const parseGmtOffsetMinutes = (value) => {
   return sign * (hours * 60 + minutes);
 };
 
-export const toTitleCase = (str) => {
+export const toTitleCase = (str: string | null | undefined): string => {
   if (!str || typeof str !== "string") return "";
   // Preserve single spaces between words (for middle names like "John Michael")
   // Only collapse multiple consecutive spaces into one
@@ -31,17 +31,17 @@ export const toTitleCase = (str) => {
     .trim();
 };
 
-export const normalizePreferredName = (value) => {
+export const normalizePreferredName = (value: string | null | undefined): string => {
   if (!value || typeof value !== "string") return "";
   return toTitleCase(value.trim());
 };
 
-export const normalizeBicycleDescription = (value) => {
+export const normalizeBicycleDescription = (value: string | null | undefined): string => {
   if (!value || typeof value !== "string") return "";
   return value.trim();
 };
 
-export const normalizeHousingStatus = (value) => {
+export const normalizeHousingStatus = (value: string | null | undefined): string => {
   const v = (value || "").toString().trim().toLowerCase();
   if (!v) return "Unhoused";
   if (HOUSING_STATUSES.map((s) => s.toLowerCase()).includes(v)) {
@@ -55,7 +55,7 @@ export const normalizeHousingStatus = (value) => {
   return "Unhoused";
 };
 
-export const normalizeTimeComponent = (value) => {
+export const normalizeTimeComponent = (value: string | number | null | undefined): string | null => {
   if (value == null) return null;
   const [rawHours, rawMinutes] = value.toString().trim().split(":");
   if (rawHours == null || rawMinutes == null) return null;
@@ -68,7 +68,7 @@ export const normalizeTimeComponent = (value) => {
     .padStart(2, "0")}`;
 };
 
-export const combineDateAndTimeISO = (dateStr, timeStr) => {
+export const combineDateAndTimeISO = (dateStr: string | null | undefined, timeStr: string | number | null | undefined): string | null => {
   if (!dateStr) return null;
   const normalizedTime = normalizeTimeComponent(timeStr);
   if (!normalizedTime) return null;
@@ -77,25 +77,25 @@ export const combineDateAndTimeISO = (dateStr, timeStr) => {
   return candidate.toISOString();
 };
 
-export const fallbackIsoFromDateOnly = (dateStr) => {
+export const fallbackIsoFromDateOnly = (dateStr: string | null | undefined): string | null => {
   if (!dateStr) return null;
   const candidate = new Date(`${dateStr}T12:00:00`);
   if (Number.isNaN(candidate.getTime())) return null;
   return candidate.toISOString();
 };
 
-export const createLocalId = (prefix) =>
+export const createLocalId = (prefix: string): string =>
   `${prefix}-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2, 8)}`;
 
-export const extractLaundrySlotStart = (slotLabel) => {
+export const extractLaundrySlotStart = (slotLabel: string | null | undefined): string | null => {
   if (!slotLabel) return null;
   const [start] = slotLabel.split("-");
   return normalizeTimeComponent(start);
 };
 
-export const computeIsGuestBanned = (bannedUntil) => {
+export const computeIsGuestBanned = (bannedUntil: string | null | undefined): boolean => {
   if (!bannedUntil) return false;
   const parsed = new Date(bannedUntil);
   if (Number.isNaN(parsed.getTime())) {
@@ -104,7 +104,7 @@ export const computeIsGuestBanned = (bannedUntil) => {
   return parsed.getTime() > Date.now();
 };
 
-export const normalizeDateInputToISO = (value) => {
+export const normalizeDateInputToISO = (value: string | Date | null | undefined): string | null => {
   if (!value) return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
@@ -155,7 +155,26 @@ export const normalizeDateInputToISO = (value) => {
   return parsed.toISOString();
 };
 
-export const resolveDonationDateParts = (value, fallback = null) => {
+// Types for donation date resolution
+interface DonationDateParts {
+  timestamp: string | null;
+  dateKey: string | null;
+}
+
+// Type for donation record input (flexible - accepts various property names)
+interface DonationRecordInput {
+  date?: string | Date | null;
+  donated_at?: string | Date | null;
+  donatedAt?: string | Date | null;
+  createdAt?: string | Date | null;
+  created_at?: string | Date | null;
+  trays?: number | string;
+  weightLbs?: number | string;
+  dateKey?: string | null;
+  [key: string]: unknown;
+}
+
+export const resolveDonationDateParts = (value: string | Date | null | undefined, fallback: string | Date | null = null): DonationDateParts => {
   const normalized =
     normalizeDateInputToISO(value) ??
     (fallback ? normalizeDateInputToISO(fallback) : null);
@@ -172,7 +191,7 @@ export const resolveDonationDateParts = (value, fallback = null) => {
   };
 };
 
-export const ensureDonationRecordShape = (record = {}) => {
+export const ensureDonationRecordShape = (record: DonationRecordInput = {}) => {
   const base = record || {};
   const rawDate =
     base.date ??
@@ -181,7 +200,7 @@ export const ensureDonationRecordShape = (record = {}) => {
     base.createdAt ??
     base.created_at ??
     null;
-  const { timestamp, dateKey } = resolveDonationDateParts(rawDate);
+  const { timestamp, dateKey } = resolveDonationDateParts(rawDate as string | Date | null);
   return {
     ...base,
     trays: Number(base.trays) || 0,

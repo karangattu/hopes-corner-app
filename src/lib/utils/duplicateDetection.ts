@@ -10,19 +10,32 @@ import {
     hasTranspositionTypo
 } from './fuzzyMatch';
 
+interface DuplicateGuest {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    preferredName?: string;
+}
+
+interface PotentialDuplicate {
+    guest: DuplicateGuest;
+    reason: string;
+    confidence: number;
+}
+
 /**
  * Check if a new guest might be a duplicate of an existing one
- * @param {string} firstName - New guest first name
- * @param {string} lastName - New guest last name
- * @param {Array} guests - Existing guest list
- * @returns {Array} - List of potential duplicates with reason
+ * @param firstName - New guest first name
+ * @param lastName - New guest last name
+ * @param guests - Existing guest list
+ * @returns List of potential duplicates with reason
  */
-export const findPotentialDuplicates = (firstName, lastName, guests) => {
+export const findPotentialDuplicates = (firstName: string, lastName: string, guests: DuplicateGuest[]): PotentialDuplicate[] => {
     if (!firstName || !lastName || !guests || guests.length === 0) return [];
 
     const newFirst = firstName.trim().toLowerCase();
     const newLast = lastName.trim().toLowerCase();
-    const potentialDuplicates = [];
+    const potentialDuplicates: PotentialDuplicate[] = [];
 
     for (const guest of guests) {
         const existingFirst = (guest.firstName || '').trim().toLowerCase();

@@ -2,35 +2,73 @@
  * Pre-computes searchable tokens and provides O(1) index lookups
  */
 
+// Type definitions - minimal interface for search functionality
+export interface SearchGuest {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  preferredName?: string;
+  name?: string;
+}
+
+export interface NameParts {
+  firstName: string;
+  lastName: string;
+  preferredName: string;
+  firstTokens: string[];
+  lastTokens: string[];
+  prefTokens: string[];
+  allTokens: string[];
+  initials: string[];
+  fullName: string;
+  fullNameNoSpaces: string;
+  preferredNameNoSpaces: string;
+  searchableText: string;
+}
+
+export interface IndexEntry<T extends SearchGuest = SearchGuest> {
+  guest: T;
+  parts: NameParts;
+}
+
+export interface SearchIndex<T extends SearchGuest = SearchGuest> {
+  byId: Map<string, IndexEntry<T>>;
+  byFirstChar: Map<string, IndexEntry<T>[]>;
+  byInitials: Map<string, IndexEntry<T>[]>;
+  guests: T[];
+}
+
 // Memoization cache for extracted name parts
-const namePartsCache = new Map();
+const namePartsCache = new Map<string, NameParts>();
 const MAX_CACHE_SIZE = 5000;
 
 /**
  * Clear the name parts cache (useful for testing)
  */
-export const clearNamePartsCache = () => {
+export const clearNamePartsCache = (): void => {
   namePartsCache.clear();
 };
 
 /**
  * Extract and cache name parts for a guest
- * @param {string} firstName 
- * @param {string} lastName 
- * @param {string} preferredName 
- * @returns {Object} Cached name parts
+ * @param firstName
+ * @param lastName
+ * @param preferredName
+ * @returns Cached name parts
  */
-export const getCachedNameParts = (firstName = '', lastName = '', preferredName = '') => {
+export const getCachedNameParts = (firstName = '', lastName = '', preferredName = ''): NameParts => {
   const cacheKey = `${firstName}|${lastName}|${preferredName}`;
 
   if (namePartsCache.has(cacheKey)) {
-    return namePartsCache.get(cacheKey);
+    return namePartsCache.get(cacheKey)!;
   }
 
   // Evict oldest entries if cache is full
   if (namePartsCache.size >= MAX_CACHE_SIZE) {
     const firstKey = namePartsCache.keys().next().value;
-    namePartsCache.delete(firstKey);
+    if (firstKey) {
+      namePartsCache.delete(firstKey);
+    }
   }
 
   const firstNorm = (firstName || '').trim().toLowerCase();
@@ -46,7 +84,7 @@ export const getCachedNameParts = (firstName = '', lastName = '', preferredName 
   const allTokens = [...new Set([...firstTokens, ...lastTokens, ...prefTokens])];
 
   // Generate initials (e.g., "John Michael Smith" -> "jms", "js")
-  const initials = new Set();
+  const initials = new Set<string>();
 
   // First + Last initials
   if (firstTokens[0] && lastTokens[0]) {
@@ -91,10 +129,13 @@ export const getCachedNameParts = (firstName = '', lastName = '', preferredName 
 /**
  * Create a search index for a list of guests
  * This pre-computes all searchable data for faster lookups
- * @param {Array} guests - Array of guest objects
- * @returns {Object} Search index with lookup structures
+/**
+ * Create a search index for a list of guests
+ * This pre-computes all searchable data for faster lookups
+ * @param guests - Array of guest objects
+ * @returns Search index with lookup structures
  */
-export const createSearchIndex = (guests) => {
+export const createSearchIndex = <T extends SearchGuest>(guests: T[]): SearchIndex<T> => {
   if (!guests || guests.length === 0) {
     return {
       byId: new Map(),
@@ -104,9 +145,9 @@ export const createSearchIndex = (guests) => {
     };
   }
 
-  const byId = new Map();
-  const byFirstChar = new Map();
-  const byInitials = new Map();
+  const byId = new Map<string, IndexEntry<T>>();
+  const byFirstChar = new Map<string, IndexEntry<T>[]>();
+  const byInitials = new Map<string, IndexEntry<T>[]>();
 
   for (const guest of guests) {
     const parts = getCachedNameParts(
@@ -115,7 +156,7 @@ export const createSearchIndex = (guests) => {
       guest.preferredName
     );
 
-    const indexEntry = {
+    const indexEntry: IndexEntry<T> = {
       guest,
       parts,
     };
@@ -129,7 +170,7 @@ export const createSearchIndex = (guests) => {
         if (!byFirstChar.has(firstChar)) {
           byFirstChar.set(firstChar, []);
         }
-        byFirstChar.get(firstChar).push(indexEntry);
+        byFirstChar.get(firstChar)!.push(indexEntry);
       }
     }
 
@@ -138,7 +179,7 @@ export const createSearchIndex = (guests) => {
       if (!byInitials.has(initial)) {
         byInitials.set(initial, []);
       }
-      byInitials.get(initial).push(indexEntry);
+      byInitials.get(initial)!.push(indexEntry);
     }
   }
 
@@ -153,13 +194,13 @@ export const createSearchIndex = (guests) => {
 /**
  * Score how well a query matches a guest's name parts
  * Lower score = better match, 99 = no match
- * @param {string} query - Normalized search query
- * @param {Object} parts - Pre-computed name parts
- * @returns {number} Match score
+ * @param query - Normalized search query
+ * @param parts - Pre-computed name parts
+ * @returns Match score
  */
-export const scoreMatch = (query, parts) => {
+export const scoreMatch = (query: string, parts: NameParts): number => {
   const { allTokens, fullName, preferredName, initials } = parts;
-  const queryTokens = query.split(/\s+/).filter(t => t.length > 0);
+  const queryTokens = query.split(/\s+/).filter((t: string) => t.length > 0);
 
   if (queryTokens.length === 0) return 99;
 
@@ -241,14 +282,19 @@ export const scoreMatch = (query, parts) => {
   return 99;
 };
 
+interface SearchOptions {
+  maxResults?: number;
+  earlyTerminationThreshold?: number;
+}
+
 /**
  * Fast search using pre-built index
- * @param {string} query - Search query
- * @param {Object} index - Search index from createSearchIndex
- * @param {Object} options - Search options
- * @returns {Array} Matching guests sorted by relevance
+ * @param query - Search query
+ * @param index - Search index from createSearchIndex
+ * @param options - Search options
+ * @returns Matching guests sorted by relevance
  */
-export const searchWithIndex = (query, index, options = {}) => {
+export const searchWithIndex = <T extends SearchGuest>(query: string, index: SearchIndex<T>, options: SearchOptions = {}): T[] => {
   const {
     maxResults = 100,
     earlyTerminationThreshold = 20, // Stop searching after this many exact matches
@@ -286,10 +332,10 @@ export const searchWithIndex = (query, index, options = {}) => {
 
   // Get candidate entries based on first character of first query token
   const firstChar = queryTokens[0][0];
-  let candidates = [];
+  let candidates: IndexEntry<T>[];
 
   if (index.byFirstChar.has(firstChar)) {
-    candidates = index.byFirstChar.get(firstChar);
+    candidates = index.byFirstChar.get(firstChar) || [];
   } else {
     // Fallback: search all guests
     candidates = Array.from(index.byId.values());

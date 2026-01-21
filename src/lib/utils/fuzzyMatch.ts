@@ -2,11 +2,26 @@
  * Fuzzy name matching utility for guest search suggestions
  */
 
+// Guest type for fuzzy matching
+interface FuzzyGuest {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  preferredName?: string;
+  name?: string;
+}
+
+// Suggestion result with metadata
+export interface FuzzySuggestion extends FuzzyGuest {
+  _suggestionScore: number;
+  _matchType: string;
+}
+
 /**
  * Common nickname mappings (bidirectional)
  * Maps formal names to their common nicknames and vice versa
  */
-export const COMMON_NICKNAMES = {
+export const COMMON_NICKNAMES: Record<string, string[]> = {
   // Male names
   william: ['bill', 'billy', 'will', 'willy', 'liam'],
   robert: ['bob', 'bobby', 'rob', 'robbie', 'bert'],
@@ -96,10 +111,10 @@ for (const [formal, nicks] of Object.entries(COMMON_NICKNAMES)) {
 
 /**
  * Get all nickname variants for a given name
- * @param {string} name - Name to get variants for
- * @returns {string[]} - Array of all name variants including the original
+ * @param name - Name to get variants for
+ * @returns Array of all name variants including the original
  */
-export const getNicknameVariants = (name) => {
+export const getNicknameVariants = (name: string): string[] => {
   if (!name) return [];
   const lower = name.toLowerCase().trim();
   const variants = nicknameLookup.get(lower);
@@ -108,11 +123,11 @@ export const getNicknameVariants = (name) => {
 
 /**
  * Check if two names are nickname variants of each other
- * @param {string} a - First name
- * @param {string} b - Second name
- * @returns {boolean}
+ * @param a - First name
+ * @param b - Second name
+ * @returns Whether names are nickname variants
  */
-export const areNicknameVariants = (a, b) => {
+export const areNicknameVariants = (a: string, b: string): boolean => {
   if (!a || !b) return false;
   const aLower = a.toLowerCase().trim();
   const bLower = b.toLowerCase().trim();
@@ -157,11 +172,13 @@ for (let row = 0; row < KEYBOARD_ROWS.length; row++) {
 
 /**
  * Check if a character substitution is a keyboard adjacency error
- * @param {string} a - First character
- * @param {string} b - Second character
- * @returns {boolean}
+/**
+ * Check if a character substitution is a keyboard adjacency error
+ * @param a - First character
+ * @param b - Second character
+ * @returns Whether characters are adjacent on keyboard
  */
-export const isKeyboardAdjacent = (a, b) => {
+export const isKeyboardAdjacent = (a: string, b: string): boolean => {
   if (!a || !b) return false;
   const aLower = a.toLowerCase();
   const bLower = b.toLowerCase();
@@ -172,11 +189,11 @@ export const isKeyboardAdjacent = (a, b) => {
 /**
  * Detect if a string has a keyboard adjacency typo compared to another
  * Returns true if strings differ by exactly one keyboard-adjacent character
- * @param {string} a - First string (search term)
- * @param {string} b - Second string (name)
- * @returns {boolean}
+ * @param a - First string (search term)
+ * @param b - Second string (name)
+ * @returns Whether there's a keyboard typo
  */
-export const hasKeyboardTypo = (a, b) => {
+export const hasKeyboardTypo = (a: string, b: string): boolean => {
   if (!a || !b) return false;
   const aLower = a.toLowerCase();
   const bLower = b.toLowerCase();
@@ -200,11 +217,11 @@ export const hasKeyboardTypo = (a, b) => {
 /**
  * Detect if strings differ by adjacent character transposition
  * e.g., "teh" -> "the", "micheal" -> "michael"
- * @param {string} a - First string
- * @param {string} b - Second string
- * @returns {boolean}
+ * @param a - First string
+ * @param b - Second string
+ * @returns Whether there's a transposition typo
  */
-export const hasTranspositionTypo = (a, b) => {
+export const hasTranspositionTypo = (a: string, b: string): boolean => {
   if (!a || !b) return false;
   const aLower = a.toLowerCase();
   const bLower = b.toLowerCase();
@@ -242,12 +259,12 @@ export const hasTranspositionTypo = (a, b) => {
  * Uses early termination when distance exceeds maxDistance threshold
  * Uses two-row matrix instead of full matrix to reduce memory allocation
  * 
- * @param {string} a - First string
- * @param {string} b - Second string
- * @param {number} maxDistance - Optional max distance threshold for early termination
- * @returns {number} - The edit distance (or maxDistance+1 if exceeded)
+ * @param a - First string
+ * @param b - Second string
+ * @param maxDistance - Optional max distance threshold for early termination
+ * @returns The edit distance (or maxDistance+1 if exceeded)
  */
-export const levenshteinDistance = (a, b, maxDistance = Infinity) => {
+export const levenshteinDistance = (a: string, b: string, maxDistance = Infinity): number => {
   if (!a || !b) return Math.max((a || '').length, (b || '').length);
 
   const aLower = a.toLowerCase();
@@ -313,12 +330,12 @@ export const levenshteinDistance = (a, b, maxDistance = Infinity) => {
  * 
  * Uses early termination when similarity would be below threshold
  * 
- * @param {string} a - First string
- * @param {string} b - Second string
- * @param {number} minSimilarity - Optional minimum similarity threshold (default 0)
- * @returns {number} - Similarity score from 0 to 1
+ * @param a - First string
+ * @param b - Second string
+ * @param minSimilarity - Optional minimum similarity threshold (default 0)
+ * @returns Similarity score from 0 to 1
  */
-export const similarityScore = (a, b, minSimilarity = 0) => {
+export const similarityScore = (a: string, b: string, minSimilarity = 0): number => {
   if (!a || !b) return 0;
   const maxLen = Math.max(a.length, b.length);
   if (maxLen === 0) return 1;
@@ -338,11 +355,11 @@ export const similarityScore = (a, b, minSimilarity = 0) => {
 
 /**
  * Check if first characters of names match (for common typos)
- * @param {string} search - Search term
- * @param {string} name - Name to compare
- * @returns {boolean}
+ * @param search - Search term
+ * @param name - Name to compare
+ * @returns Whether first characters match
  */
-export const hasMatchingFirstChars = (search, name) => {
+export const hasMatchingFirstChars = (search: string, name: string): boolean => {
   if (!search || !name) return false;
   const searchLower = search.toLowerCase().trim();
   const nameLower = name.toLowerCase().trim();
@@ -364,15 +381,15 @@ export const hasMatchingFirstChars = (search, name) => {
 /**
  * Check for phonetic similarity (handles common sound-alike names)
  * Enhanced for Spanish names and common phonetic patterns
- * @param {string} a - First string
- * @param {string} b - Second string
- * @returns {boolean} - Whether names sound similar
+ * @param a - First string
+ * @param b - Second string
+ * @returns Whether names sound similar
  */
-export const soundsLike = (a, b) => {
+export const soundsLike = (a: string, b: string): boolean => {
   if (!a || !b) return false;
 
   // Enhanced phonetic normalization including Spanish patterns
-  const normalize = (str) => {
+  const normalize = (str: string): string => {
     return str.toLowerCase()
       .trim()
       // Spanish phonetic patterns
@@ -411,11 +428,11 @@ export const soundsLike = (a, b) => {
 /**
  * Check if a search token is a good substring match for a name
  * Useful for catching partial matches like "francas" -> "francis"
- * @param {string} token - Search token
- * @param {string} name - Name to check
- * @returns {number} - Similarity score from 0 to 1
+ * @param token - Search token
+ * @param name - Name to check
+ * @returns Similarity score from 0 to 1
  */
-const getSubstringMatchScore = (token, name) => {
+const getSubstringMatchScore = (token: string, name: string): number => {
   if (!token || !name) return 0;
   if (token.length > name.length) return 0;
 
@@ -447,12 +464,12 @@ const getSubstringMatchScore = (token, name) => {
 
 /**
  * Find fuzzy matches for a search term in a list of guests
- * @param {string} searchTerm - The term being searched for
- * @param {Array} guests - Array of guest objects
- * @param {number} maxSuggestions - Maximum number of suggestions to return
- * @returns {Array} - Array of suggested guests sorted by relevance
+ * @param searchTerm - The term being searched for
+ * @param guests - Array of guest objects
+ * @param maxSuggestions - Maximum number of suggestions to return
+ * @returns Array of suggested guests sorted by relevance
  */
-export const findFuzzySuggestions = (searchTerm, guests, maxSuggestions = 5) => {
+export const findFuzzySuggestions = (searchTerm: string, guests: FuzzyGuest[], maxSuggestions = 5): FuzzySuggestion[] => {
   if (!searchTerm || !guests || guests.length === 0) return [];
 
   const searchLower = searchTerm.toLowerCase().trim();
@@ -547,7 +564,7 @@ export const findFuzzySuggestions = (searchTerm, guests, maxSuggestions = 5) => 
     .map(item => ({
       ...item.guest,
       _suggestionScore: item.score,
-      _matchType: item.matchType,
+      _matchType: item.matchType as string,
     }));
 
   return suggestions;
@@ -555,10 +572,10 @@ export const findFuzzySuggestions = (searchTerm, guests, maxSuggestions = 5) => 
 
 /**
  * Format a suggestion display name with the matched part highlighted
- * @param {Object} guest - Guest object with suggestion metadata
- * @returns {Object} - Object with displayName and highlight info
+ * @param guest - Guest object with suggestion metadata
+ * @returns Object with displayName and highlight info
  */
-export const formatSuggestionDisplay = (guest) => {
+export const formatSuggestionDisplay = (guest: FuzzySuggestion) => {
   const preferredName = guest.preferredName?.trim();
   const fullName = `${guest.firstName || ''} ${guest.lastName || ''}`.trim();
 
