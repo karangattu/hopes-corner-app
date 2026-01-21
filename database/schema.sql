@@ -619,6 +619,7 @@ create table if not exists public.holiday_visits (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
   served_at timestamptz not null default now(),
+  visit_date date,
   created_at timestamptz not null default now()
 );
 
@@ -657,6 +658,7 @@ create table if not exists public.haircut_visits (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
   served_at timestamptz not null default now(),
+  service_date date,
   created_at timestamptz not null default now()
 );
 
