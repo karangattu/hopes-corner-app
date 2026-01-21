@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useActionHistoryStore } from '@/stores/useActionHistoryStore';
+import { useTodayMealStatusMap, useTodayActionStatusMap } from '@/stores/selectors/todayStatusSelectors';
 import { UserRole } from '@/lib/auth/types';
 import { useSession } from 'next-auth/react';
 import { Link, Unlink, Utensils, Search, X, Loader2, RotateCcw } from 'lucide-react';
@@ -29,6 +30,10 @@ export default function LinkedGuestsList({ guestId, className = '' }: LinkedGues
 
     const { addMealRecord, mealRecords } = useMealsStore();
     const { addAction, getActionsForGuestToday } = useActionHistoryStore();
+
+    // Use precomputed maps for efficient lookups
+    const mealStatusMap = useTodayMealStatusMap();
+    const actionStatusMap = useTodayActionStatusMap();
 
     const [isLinking, setIsLinking] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -100,9 +105,16 @@ export default function LinkedGuestsList({ guestId, className = '' }: LinkedGues
             .slice(0, 5); // Limit to 5 results
     }, [searchTerm, allGuests, linkedGuests, guestId]);
 
+    // Use precomputed map instead of scanning mealRecords per guest
     const getLinkedGuestStatus = (id: string) => {
-        const hasMeal = mealRecords.some(r => r.guestId === id && pacificDateStringFrom(r.date) === today);
-        return { hasMeal };
+        const status = mealStatusMap.get(id);
+        return { hasMeal: status?.hasMeal || false };
+    };
+
+    // Helper to get action ID for a linked guest from precomputed map
+    const getLinkedGuestMealActionId = (id: string) => {
+        const actions = actionStatusMap.get(id);
+        return actions?.mealActionId;
     };
 
     if (linkedGuests.length === 0 && !isLinking) {
@@ -141,12 +153,8 @@ export default function LinkedGuestsList({ guestId, className = '' }: LinkedGues
                     const status = getLinkedGuestStatus(g.id);
                     const displayName = g.preferredName || `${g.firstName || ''} ${g.lastName || ''}`.trim() || 'Unknown Guest';
 
-                    // Find if there's an action to undo today
-                    const guestActions = getActionsForGuestToday(g.id);
-                    const mealAction = guestActions.find(a =>
-                        a.type === 'MEAL_ADDED' &&
-                        pacificDateStringFrom(a.timestamp) === today
-                    );
+                    // Use precomputed action ID instead of scanning actions per guest
+                    const mealActionId = getLinkedGuestMealActionId(g.id);
 
                     return (
                         <div key={g.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-100 group">
@@ -162,11 +170,11 @@ export default function LinkedGuestsList({ guestId, className = '' }: LinkedGues
                                         <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded font-bold">
                                             Served
                                         </span>
-                                        {mealAction && (
+                                        {mealActionId && (
                                             <button
                                                 onClick={async () => {
                                                     if (confirm(`Undo meal for ${displayName}?`)) {
-                                                        const success = await useActionHistoryStore.getState().undoAction(mealAction.id);
+                                                        const success = await useActionHistoryStore.getState().undoAction(mealActionId);
                                                         if (success) toast.success('Meal undone');
                                                     }
                                                 }}

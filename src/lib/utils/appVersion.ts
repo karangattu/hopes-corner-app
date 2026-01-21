@@ -21,13 +21,8 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '0.1.0',
-        date: 'January 6, 2026',
+        date: 'January 20, 2026',
         highlights: [
-            {
-                type: 'feature',
-                title: 'Next.js Migration',
-                description: 'The app has been completely rebuilt using Next.js 16, TypeScript, and modern React patterns for improved performance and maintainability.',
-            },
             {
                 type: 'feature',
                 title: 'Enhanced Guest Management',
@@ -37,11 +32,6 @@ export const CHANGELOG: ChangelogEntry[] = [
                 type: 'feature',
                 title: 'Keyboard Shortcuts',
                 description: 'Press ⌘K (or Ctrl+K) to quickly focus the search bar, and ⌘⌥G (or Ctrl+Alt+G) to open the new guest form.',
-            },
-            {
-                type: 'performance',
-                title: 'Offline Support',
-                description: 'The app now works offline with service worker caching for core functionality.',
             },
         ],
     },

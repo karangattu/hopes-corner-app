@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from 'react';
 import { Search, UserPlus, X, Users, Loader2 } from 'lucide-react';
 import { useGuestsStore, Guest } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
@@ -13,8 +13,12 @@ import { ServiceStatusOverview } from '@/components/checkin/ServiceStatusOvervie
 import { KeyboardShortcutsBar } from '@/components/checkin/KeyboardShortcutsBar';
 import { MealServiceTimer } from '@/components/checkin/MealServiceTimer';
 import { TodayStats } from '@/components/checkin/TodayStats';
+import { useTodayStatusMaps } from '@/stores/selectors/todayStatusSelectors';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils/cn';
+
+// Threshold for disabling animations for better performance
+const LARGE_LIST_THRESHOLD = 20;
 
 type SortKey = 'firstName' | 'lastName' | null;
 type SortDirection = 'asc' | 'desc';
@@ -28,10 +32,17 @@ export default function CheckInPage() {
     const [defaultLocation, setDefaultLocation] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
     const guestCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+    const listContainerRef = useRef<HTMLDivElement>(null);
+
+    // Use deferred value for search to prevent UI jank during typing
+    const deferredSearchQuery = useDeferredValue(searchQuery);
 
     const { guests, loadFromSupabase: loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase } = useGuestsStore();
     const { loadFromSupabase: loadMeals } = useMealsStore();
     const { loadFromSupabase: loadServices } = useServicesStore();
+
+    // Precomputed status maps for efficient per-guest lookups
+    const { mealStatus, serviceStatus, actionStatus } = useTodayStatusMaps();
 
     // Initial data load
     useEffect(() => {
@@ -54,13 +65,13 @@ export default function CheckInPage() {
         init();
     }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices]);
 
-    // Search logic using the migrated flexibleNameSearch
+    // Search logic using the migrated flexibleNameSearch (with deferred value)
     const filteredGuests = useMemo(() => {
-        if (!searchQuery.trim()) {
+        if (!deferredSearchQuery.trim()) {
             return [];
         }
-        return flexibleNameSearch(searchQuery, guests);
-    }, [guests, searchQuery]);
+        return flexibleNameSearch(deferredSearchQuery, guests);
+    }, [guests, deferredSearchQuery]);
 
     // Apply sorting
     const sortedGuests = useMemo(() => {
@@ -74,11 +85,14 @@ export default function CheckInPage() {
         });
     }, [filteredGuests, sortConfig]);
 
-    // Fuzzy suggestions for when there are no matches
+    // Determine if we should use virtualization and disable animations
+    const isLargeList = sortedGuests.length > LARGE_LIST_THRESHOLD;
+
+    // Fuzzy suggestions for when there are no matches (use deferred value)
     const fuzzySuggestions = useMemo(() => {
-        if (searchQuery.trim().length < 2 || filteredGuests.length > 0) return [];
-        return findFuzzySuggestions(searchQuery, guests, 3);
-    }, [searchQuery, filteredGuests, guests]);
+        if (deferredSearchQuery.trim().length < 2 || filteredGuests.length > 0) return [];
+        return findFuzzySuggestions(deferredSearchQuery, guests, 3);
+    }, [deferredSearchQuery, filteredGuests, guests]);
 
     const handleShowCreateForm = useCallback(() => {
         const rawSearch = searchQuery.trim();
@@ -395,31 +409,64 @@ export default function CheckInPage() {
                             </button>
                         </div>
 
-                        {/* Guest Cards */}
-                        <div className="grid grid-cols-1 gap-4">
-                            <AnimatePresence>
-                                {sortedGuests.filter((g) => g && g.id).map((guest, index: number) => (
-                                    <motion.div
-                                        key={guest.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        transition={{ duration: 0.2 }}
-                                        className={cn(
-                                            'outline-none',
-                                            selectedIndex === index ? 'ring-2 ring-emerald-500 ring-offset-2 rounded-2xl' : ''
-                                        )}
-                                        tabIndex={-1}
-                                        ref={(el) => { guestCardRefs.current[guest.id] = el; }}
-                                    >
-                                        <GuestCard
-                                            guest={guest}
-                                            onClearSearch={handleClearSearch}
-                                            isSelected={selectedIndex === index}
-                                        />
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
+                        {/* Guest Cards - Animations disabled for large lists */}
+                        <div ref={listContainerRef} className="space-y-4">
+                            {isLargeList ? (
+                                // Non-animated list for large result sets (better performance)
+                                <div className="grid grid-cols-1 gap-4">
+                                    {sortedGuests.filter((g) => g && g.id).map((guest, index: number) => (
+                                        <div
+                                            key={guest.id}
+                                            className={cn(
+                                                'outline-none',
+                                                selectedIndex === index ? 'ring-2 ring-emerald-500 ring-offset-2 rounded-2xl' : ''
+                                            )}
+                                            tabIndex={-1}
+                                            ref={(el) => { guestCardRefs.current[guest.id] = el; }}
+                                        >
+                                            <GuestCard
+                                                guest={guest}
+                                                onClearSearch={handleClearSearch}
+                                                isSelected={selectedIndex === index}
+                                                mealStatusMap={mealStatus}
+                                                serviceStatusMap={serviceStatus}
+                                                actionStatusMap={actionStatus}
+                                                disableLayoutAnimation={true}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                // Animated list for small result sets
+                                <div className="grid grid-cols-1 gap-4">
+                                    <AnimatePresence>
+                                        {sortedGuests.filter((g) => g && g.id).map((guest, index: number) => (
+                                            <motion.div
+                                                key={guest.id}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, scale: 0.95 }}
+                                                transition={{ duration: 0.2 }}
+                                                className={cn(
+                                                    'outline-none',
+                                                    selectedIndex === index ? 'ring-2 ring-emerald-500 ring-offset-2 rounded-2xl' : ''
+                                                )}
+                                                tabIndex={-1}
+                                                ref={(el) => { guestCardRefs.current[guest.id] = el; }}
+                                            >
+                                                <GuestCard
+                                                    guest={guest}
+                                                    onClearSearch={handleClearSearch}
+                                                    isSelected={selectedIndex === index}
+                                                    mealStatusMap={mealStatus}
+                                                    serviceStatusMap={serviceStatus}
+                                                    actionStatusMap={actionStatus}
+                                                />
+                                            </motion.div>
+                                        ))}
+                                    </AnimatePresence>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}

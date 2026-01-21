@@ -20,6 +20,16 @@ const mockUndoAction = vi.fn().mockResolvedValue(true);
 const mockGetActionsForGuestToday = vi.fn().mockReturnValue([]);
 const mockGetLinkedGuests = vi.fn();
 
+// Mock meal status map (empty by default)
+const mockMealStatusMap = new Map();
+const mockActionStatusMap = new Map();
+
+// Mock the selectors
+vi.mock('@/stores/selectors/todayStatusSelectors', () => ({
+    useTodayMealStatusMap: vi.fn(() => mockMealStatusMap),
+    useTodayActionStatusMap: vi.fn(() => mockActionStatusMap),
+}));
+
 // Mock stores
 vi.mock('@/stores/useGuestsStore', () => ({
     useGuestsStore: vi.fn(() => ({
@@ -62,6 +72,8 @@ describe('LinkedGuestsList Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockGetLinkedGuests.mockReturnValue([]);
+        mockMealStatusMap.clear();
+        mockActionStatusMap.clear();
         window.confirm = vi.fn().mockReturnValue(true);
     });
 

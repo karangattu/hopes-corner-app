@@ -31,6 +31,8 @@ const eslintConfig = defineConfig([
       "react-hooks/exhaustive-deps": "off",
       // Allow img tags during migration
       "@next/next/no-img-element": "off",
+      // Allow ref mutations in render (common pattern for virtualized lists)
+      "react-hooks/immutability": "off",
     },
   },
 ]);

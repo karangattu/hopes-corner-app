@@ -17,7 +17,7 @@ interface GuestCreateModalProps {
 const BAY_AREA_CITIES = [
     'Campbell', 'Cupertino', 'Gilroy', 'Los Altos Hills', 'Los Altos', 'Los Gatos',
     'Milpitas', 'Monte Sereno', 'Morgan Hill', 'Mountain View', 'Palo Alto',
-    'San Jose', 'Santa Clara', 'Saratoga', 'Sunnyvale'
+    'San Jose', 'Santa Clara', 'Saratoga', 'Sunnyvale', 'Outside Santa Clara County'
 ];
 
 export function GuestCreateModal({ onClose, initialName = '', defaultLocation = '' }: GuestCreateModalProps) {

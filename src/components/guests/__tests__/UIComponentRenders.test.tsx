@@ -63,6 +63,32 @@ vi.mock('@/stores/useActionHistoryStore', () => ({
     })),
 }));
 
+// Mock the selectors for LinkedGuestsList
+vi.mock('@/stores/selectors/todayStatusSelectors', () => ({
+    useTodayMealStatusMap: vi.fn(() => new Map()),
+    useTodayActionStatusMap: vi.fn(() => new Map()),
+    useTodayServiceStatusMap: vi.fn(() => new Map()),
+    useTodayStatusMaps: vi.fn(() => ({
+        mealStatus: new Map(),
+        serviceStatus: new Map(),
+        actionStatus: new Map(),
+    })),
+    defaultMealStatus: {
+        hasMeal: false,
+        mealCount: 0,
+        extraMealCount: 0,
+        totalMeals: 0,
+    },
+    defaultServiceStatus: {
+        hasShower: false,
+        hasLaundry: false,
+        hasBicycle: false,
+        hasHaircut: false,
+        hasHoliday: false,
+    },
+    defaultActionStatus: {},
+}));
+
 vi.mock('@/stores/useModalStore', () => ({
     useModalStore: vi.fn(() => ({
         setShowerPickerGuest: vi.fn(),

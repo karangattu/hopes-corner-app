@@ -37,6 +37,19 @@ import { GuestEditModal } from '@/components/modals/GuestEditModal';
 import { BanManagementModal } from '@/components/modals/BanManagementModal';
 import { WarningManagementModal } from '@/components/modals/WarningManagementModal';
 import { MobileServiceSheet } from '@/components/checkin/MobileServiceSheet';
+import type { 
+    MealStatusMap, 
+    ServiceStatusMap, 
+    ActionStatusMap,
+    TodayMealStatus,
+    TodayServiceStatus,
+    TodayGuestActions
+} from '@/stores/selectors/todayStatusSelectors';
+import {
+    defaultMealStatus,
+    defaultServiceStatus,
+    defaultActionStatus
+} from '@/stores/selectors/todayStatusSelectors';
 import toast from 'react-hot-toast';
 
 interface GuestCardProps {
@@ -45,6 +58,13 @@ interface GuestCardProps {
     onSelect?: () => void;
     compact?: boolean;
     onClearSearch?: () => void;
+    // Optional precomputed status maps for performance optimization
+    // When provided, skips local useMemo calculations
+    mealStatusMap?: MealStatusMap;
+    serviceStatusMap?: ServiceStatusMap;
+    actionStatusMap?: ActionStatusMap;
+    // Disable layout animations for better performance in large lists
+    disableLayoutAnimation?: boolean;
 }
 
 export function GuestCard({
@@ -52,7 +72,11 @@ export function GuestCard({
     isSelected = false,
     onSelect,
     compact = false,
-    onClearSearch
+    onClearSearch,
+    mealStatusMap,
+    serviceStatusMap,
+    actionStatusMap,
+    disableLayoutAnimation = false
 }: GuestCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isPending, setIsPending] = useState(false);
@@ -77,50 +101,101 @@ export function GuestCard({
 
     const today = todayPacificDateString();
 
-    // Get actions for this guest
-    const guestActions = getActionsForGuestToday(guest.id);
-
-    // Check services today
-    const todayMeal = useMemo(() =>
-        mealRecords.find(
+    // Always compute local status (useMemo must be called unconditionally)
+    // Then use precomputed map if provided
+    const localMealStatus = useMemo(() => {
+        const todayRecord = mealRecords.find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [mealRecords, guest.id, today]);
-
-    const todayExtraMeals = useMemo(() =>
-        (extraMealRecords || []).filter(
+        );
+        const todayExtras = (extraMealRecords || []).filter(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [extraMealRecords, guest.id, today]);
+        );
+        const extraCount = todayExtras.reduce((sum, r) => sum + (r.count || 1), 0);
+        const baseCount = todayRecord?.count || 0;
+        return {
+            hasMeal: !!todayRecord,
+            mealRecord: todayRecord,
+            mealCount: baseCount,
+            extraMealCount: extraCount,
+            totalMeals: baseCount + extraCount,
+        };
+    }, [mealRecords, extraMealRecords, guest.id, today]);
 
-    const extraMealsCount = todayExtraMeals.reduce((sum, r) => sum + (r.count || 1), 0);
-    const baseMealCount = todayMeal?.count || 0;
-    const totalMeals = baseMealCount + extraMealsCount;
-
-    const todayShower = useMemo(() =>
-        showerRecords.find(
+    const localServiceStatus = useMemo(() => {
+        const shower = showerRecords.find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [showerRecords, guest.id, today]);
-
-    const todayLaundry = useMemo(() =>
-        laundryRecords.find(
+        );
+        const laundry = laundryRecords.find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [laundryRecords, guest.id, today]);
-
-    const todayBicycle = useMemo(() =>
-        (bicycleRecords || []).find(
+        );
+        const bicycle = (bicycleRecords || []).find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [bicycleRecords, guest.id, today]);
-
-    const todayHaircut = useMemo(() =>
-        (haircutRecords || []).find(
+        );
+        const haircut = (haircutRecords || []).find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [haircutRecords, guest.id, today]);
-
-    const todayHoliday = useMemo(() =>
-        (holidayRecords || []).find(
+        );
+        const holiday = (holidayRecords || []).find(
             (r) => r.guestId === guest.id && pacificDateStringFrom(r.date) === today
-        ), [holidayRecords, guest.id, today]);
+        );
+        return {
+            hasShower: !!shower,
+            hasLaundry: !!laundry,
+            hasBicycle: !!bicycle,
+            hasHaircut: !!haircut,
+            hasHoliday: !!holiday,
+            showerRecord: shower ? { id: shower.id, time: shower.time, status: shower.status } : undefined,
+            laundryRecord: laundry ? { id: laundry.id, time: laundry.time, status: laundry.status } : undefined,
+            bicycleRecord: bicycle ? { id: bicycle.id, status: bicycle.status } : undefined,
+            haircutRecord: haircut ? { id: haircut.id } : undefined,
+            holidayRecord: holiday ? { id: holiday.id } : undefined,
+        };
+    }, [showerRecords, laundryRecords, bicycleRecords, haircutRecords, holidayRecords, guest.id, today]);
 
-    const hasServiceToday = !!todayMeal || !!todayShower || !!todayLaundry || !!todayBicycle;
+    const localActionStatus = useMemo(() => {
+        const actions = getActionsForGuestToday(guest.id);
+        return {
+            mealActionId: actions.find(a => a.type === 'MEAL_ADDED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            showerActionId: actions.find(a => a.type === 'SHOWER_BOOKED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            laundryActionId: actions.find(a => a.type === 'LAUNDRY_BOOKED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            bicycleActionId: actions.find(a => a.type === 'BICYCLE_LOGGED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            haircutActionId: actions.find(a => a.type === 'HAIRCUT_LOGGED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            holidayActionId: actions.find(a => a.type === 'HOLIDAY_LOGGED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+        };
+    }, [getActionsForGuestToday, guest.id, today]);
+
+    // Use precomputed maps if provided, otherwise use local calculation
+    const mealStatus: TodayMealStatus = mealStatusMap 
+        ? (mealStatusMap.get(guest.id) || defaultMealStatus)
+        : localMealStatus;
+
+    const serviceStatus: TodayServiceStatus = serviceStatusMap
+        ? (serviceStatusMap.get(guest.id) || defaultServiceStatus)
+        : localServiceStatus;
+
+    const actionStatus: TodayGuestActions = actionStatusMap
+        ? (actionStatusMap.get(guest.id) || defaultActionStatus)
+        : localActionStatus;
+
+    // Extract values for easier use
+    const todayMeal = mealStatus.mealRecord;
+    const baseMealCount = mealStatus.mealCount;
+    const extraMealsCount = mealStatus.extraMealCount;
+    const totalMeals = mealStatus.totalMeals;
+
+    const todayShower = serviceStatus.hasShower;
+    const todayLaundry = serviceStatus.hasLaundry;
+    const todayBicycle = serviceStatus.hasBicycle;
+    const todayHaircut = serviceStatus.hasHaircut;
+    const todayHoliday = serviceStatus.hasHoliday;
+
+    const mealAction = actionStatus.mealActionId ? { id: actionStatus.mealActionId } : undefined;
+    const showerAction = actionStatus.showerActionId ? { id: actionStatus.showerActionId } : undefined;
+    const laundryAction = actionStatus.laundryActionId ? { id: actionStatus.laundryActionId } : undefined;
+    const bicycleAction = actionStatus.bicycleActionId ? { id: actionStatus.bicycleActionId } : undefined;
+    const haircutAction = actionStatus.haircutActionId ? { id: actionStatus.haircutActionId } : undefined;
+    const holidayAction = actionStatus.holidayActionId ? { id: actionStatus.holidayActionId } : undefined;
+
+    const hasServiceToday = !!todayMeal || todayShower || todayLaundry || todayBicycle;
 
     const warnings = getWarningsForGuest(guest.id);
     const linkedGuests = getLinkedGuests(guest.id);
@@ -131,14 +206,6 @@ export function GuestCard({
     const isBannedFromShower = isBanned && (guest.bannedFromShower || (!guest.bannedFromMeals && !guest.bannedFromShower && !guest.bannedFromLaundry && !guest.bannedFromBicycle));
     const isBannedFromLaundry = isBanned && (guest.bannedFromLaundry || (!guest.bannedFromMeals && !guest.bannedFromShower && !guest.bannedFromLaundry && !guest.bannedFromBicycle));
     const isBannedFromBicycle = isBanned && (guest.bannedFromBicycle || (!guest.bannedFromMeals && !guest.bannedFromShower && !guest.bannedFromLaundry && !guest.bannedFromBicycle));
-
-    // Find actions to undo
-    const mealAction = guestActions.find(a => a.type === 'MEAL_ADDED' && pacificDateStringFrom(a.timestamp) === today);
-    const showerAction = guestActions.find(a => a.type === 'SHOWER_BOOKED' && pacificDateStringFrom(a.timestamp) === today);
-    const laundryAction = guestActions.find(a => a.type === 'LAUNDRY_BOOKED' && pacificDateStringFrom(a.timestamp) === today);
-    const bicycleAction = guestActions.find(a => a.type === 'BICYCLE_LOGGED' && pacificDateStringFrom(a.timestamp) === today);
-    const haircutAction = guestActions.find(a => a.type === 'HAIRCUT_LOGGED' && pacificDateStringFrom(a.timestamp) === today);
-    const holidayAction = guestActions.find(a => a.type === 'HOLIDAY_LOGGED' && pacificDateStringFrom(a.timestamp) === today);
 
     const handleMealAdd = async (e: React.MouseEvent, count: number) => {
         e.stopPropagation();
@@ -253,9 +320,16 @@ export function GuestCard({
         if (onSelect) onSelect();
     };
 
+    // Conditionally wrap in motion.div for layout animation
+    // When disableLayoutAnimation is true, use a plain div for better performance
+    const CardWrapper = disableLayoutAnimation ? 'div' : motion.div;
+    const cardWrapperProps = disableLayoutAnimation 
+        ? {} 
+        : { layout: true };
+
     return (
-        <motion.div
-            layout
+        <CardWrapper
+            {...cardWrapperProps}
             className={cn(
                 'group relative overflow-hidden transition-all duration-300 border bg-white',
                 compact ? 'rounded-lg' : 'rounded-2xl',
@@ -830,6 +904,6 @@ export function GuestCard({
                 hasLaundryToday={!!todayLaundry}
                 isBannedFromLaundry={isBannedFromLaundry}
             />
-        </motion.div>
+        </CardWrapper>
     );
 }
