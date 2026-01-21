@@ -72,24 +72,19 @@ body:
     validations:
       required: true
 
-  - type: checkboxes
-    id: quality-requirements
+  - type: markdown
     attributes:
-      label: Quality & Testing Requirements
-      description: These are required for all feature implementations.
-      options:
-        - label: Read relevant existing code and follow current patterns
-          required: true
-        - label: Implement complete logic (no placeholders)
-          required: true
-        - label: Add/update tests for all new logic and UI changes
-          required: true
-        - label: "Run lint: `npm run lint`"
-          required: true
-        - label: "Run full tests: `npm test -- --run`"
-          required: true
-        - label: Verify no regressions
-          required: true
+      value: |
+        ## Quality & Testing Requirements (Mandatory)
+        
+        **All implementations MUST complete the following:**
+        
+        - ✅ Read relevant existing code and follow current patterns
+        - ✅ Implement complete logic (no placeholders)
+        - ✅ Add/update tests for all new logic and UI changes
+        - ✅ Run lint: `npm run lint`
+        - ✅ Run full tests: `npm test -- --run`
+        - ✅ Verify no regressions
 
   - type: textarea
     id: additional-notes
