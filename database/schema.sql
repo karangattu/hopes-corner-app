@@ -249,6 +249,22 @@ create trigger trg_guest_warnings_updated_at
 before update on public.guest_warnings
 for each row execute function public.touch_updated_at();
 
+-- RLS for guest_warnings table
+alter table public.guest_warnings enable row level security;
+
+drop policy if exists "Authenticated users can view guest warnings" on public.guest_warnings;
+create policy "Authenticated users can view guest warnings"
+  on public.guest_warnings for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage guest warnings" on public.guest_warnings;
+create policy "Authenticated users can manage guest warnings"
+  on public.guest_warnings for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 -- 3b. Guest Proxies (from migrations)
 create table if not exists public.guest_proxies (
     id uuid primary key default gen_random_uuid(),
@@ -333,6 +349,22 @@ create index if not exists guests_full_name_idx
 create index if not exists guests_external_id_idx
   on public.guests (external_id);
 
+-- RLS for guests table
+alter table public.guests enable row level security;
+
+drop policy if exists "Authenticated users can view guests" on public.guests;
+create policy "Authenticated users can view guests"
+  on public.guests for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage guests" on public.guests;
+create policy "Authenticated users can manage guests"
+  on public.guests for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 -- 4. Program attendance & services
 create table if not exists public.meal_attendance (
   id uuid primary key default gen_random_uuid(),
@@ -377,6 +409,22 @@ create index if not exists meal_attendance_picked_up_by_idx
   on public.meal_attendance (picked_up_by_guest_id)
   where picked_up_by_guest_id is not null;
 
+-- RLS for meal_attendance table
+alter table public.meal_attendance enable row level security;
+
+drop policy if exists "Authenticated users can view meal attendance" on public.meal_attendance;
+create policy "Authenticated users can view meal attendance"
+  on public.meal_attendance for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage meal attendance" on public.meal_attendance;
+create policy "Authenticated users can manage meal attendance"
+  on public.meal_attendance for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 create table if not exists public.shower_reservations (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
@@ -416,6 +464,22 @@ create index if not exists shower_created_at_idx
 create index if not exists shower_guest_id_idx
   on public.shower_reservations (guest_id);
 
+-- RLS for shower_reservations table
+alter table public.shower_reservations enable row level security;
+
+drop policy if exists "Authenticated users can view shower reservations" on public.shower_reservations;
+create policy "Authenticated users can view shower reservations"
+  on public.shower_reservations for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage shower reservations" on public.shower_reservations;
+create policy "Authenticated users can manage shower reservations"
+  on public.shower_reservations for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 create table if not exists public.laundry_bookings (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
@@ -451,6 +515,22 @@ create index if not exists laundry_created_at_idx
 
 create index if not exists laundry_guest_id_idx
   on public.laundry_bookings (guest_id);
+
+-- RLS for laundry_bookings table
+alter table public.laundry_bookings enable row level security;
+
+drop policy if exists "Authenticated users can view laundry bookings" on public.laundry_bookings;
+create policy "Authenticated users can view laundry bookings"
+  on public.laundry_bookings for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage laundry bookings" on public.laundry_bookings;
+create policy "Authenticated users can manage laundry bookings"
+  on public.laundry_bookings for all
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 create table if not exists public.blocked_slots (
   id uuid default gen_random_uuid() primary key,
@@ -516,6 +596,22 @@ create index if not exists bicycle_guest_id_idx
 create index if not exists bicycle_status_idx
   on public.bicycle_repairs (status);
 
+-- RLS for bicycle_repairs table
+alter table public.bicycle_repairs enable row level security;
+
+drop policy if exists "Authenticated users can view bicycle repairs" on public.bicycle_repairs;
+create policy "Authenticated users can view bicycle repairs"
+  on public.bicycle_repairs for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage bicycle repairs" on public.bicycle_repairs;
+create policy "Authenticated users can manage bicycle repairs"
+  on public.bicycle_repairs for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 create table if not exists public.holiday_visits (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
@@ -538,6 +634,22 @@ create index if not exists holiday_created_at_idx
 create index if not exists holiday_guest_id_idx
   on public.holiday_visits (guest_id);
 
+-- RLS for holiday_visits table
+alter table public.holiday_visits enable row level security;
+
+drop policy if exists "Authenticated users can view holiday visits" on public.holiday_visits;
+create policy "Authenticated users can view holiday visits"
+  on public.holiday_visits for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage holiday visits" on public.holiday_visits;
+create policy "Authenticated users can manage holiday visits"
+  on public.holiday_visits for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 create table if not exists public.haircut_visits (
   id uuid primary key default gen_random_uuid(),
   guest_id uuid references public.guests(id) on delete cascade,
@@ -559,6 +671,22 @@ create index if not exists haircut_created_at_idx
 
 create index if not exists haircut_guest_id_idx
   on public.haircut_visits (guest_id);
+
+-- RLS for haircut_visits table
+alter table public.haircut_visits enable row level security;
+
+drop policy if exists "Authenticated users can view haircut visits" on public.haircut_visits;
+create policy "Authenticated users can view haircut visits"
+  on public.haircut_visits for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage haircut visits" on public.haircut_visits;
+create policy "Authenticated users can manage haircut visits"
+  on public.haircut_visits for all
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 create table if not exists public.items_distributed (
   id uuid primary key default gen_random_uuid(),
@@ -587,6 +715,22 @@ create index if not exists items_distributed_lookup
 create index if not exists items_distributed_jacket_lookup
   on public.items_distributed (guest_id, item_key, distributed_at desc)
   where item_key = 'jacket';
+
+-- RLS for items_distributed table
+alter table public.items_distributed enable row level security;
+
+drop policy if exists "Authenticated users can view items distributed" on public.items_distributed;
+create policy "Authenticated users can view items distributed"
+  on public.items_distributed for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage items distributed" on public.items_distributed;
+create policy "Authenticated users can manage items distributed"
+  on public.items_distributed for all
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 create table if not exists public.donations (
   id uuid primary key default gen_random_uuid(),
@@ -629,6 +773,22 @@ for each row execute function public.set_donation_date_key();
 create index if not exists donations_date_key_idx
   on public.donations (date_key desc);
 
+-- RLS for donations table
+alter table public.donations enable row level security;
+
+drop policy if exists "Authenticated users can view donations" on public.donations;
+create policy "Authenticated users can view donations"
+  on public.donations for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage donations" on public.donations;
+create policy "Authenticated users can manage donations"
+  on public.donations for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 -- 5. Settings store (single row replacing Firestore doc appSettings/global)
 create table if not exists public.app_settings (
   id text primary key default 'global',
@@ -657,6 +817,22 @@ create table if not exists public.app_settings (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- RLS for app_settings table
+alter table public.app_settings enable row level security;
+
+drop policy if exists "Authenticated users can view app settings" on public.app_settings;
+create policy "Authenticated users can view app settings"
+  on public.app_settings for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage app settings" on public.app_settings;
+create policy "Authenticated users can manage app settings"
+  on public.app_settings for all
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 -- 6. La Plaza Market donation records (separate table for partner donations)
 create table if not exists public.la_plaza_donations (
@@ -699,6 +875,22 @@ create index if not exists la_plaza_donations_date_key_idx
 create index if not exists la_plaza_donations_received_at_idx
   on public.la_plaza_donations (received_at desc);
 
+-- RLS for la_plaza_donations table
+alter table public.la_plaza_donations enable row level security;
+
+drop policy if exists "Authenticated users can view la plaza donations" on public.la_plaza_donations;
+create policy "Authenticated users can view la plaza donations"
+  on public.la_plaza_donations for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage la plaza donations" on public.la_plaza_donations;
+create policy "Authenticated users can manage la plaza donations"
+  on public.la_plaza_donations for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
 drop trigger if exists trg_app_settings_updated_at on public.app_settings;
 create trigger trg_app_settings_updated_at
 before update on public.app_settings
@@ -717,6 +909,22 @@ create table if not exists public.sync_state (
   payload jsonb,
   constraint sync_state_unique_table unique (table_name)
 );
+
+-- RLS for sync_state table
+alter table public.sync_state enable row level security;
+
+drop policy if exists "Authenticated users can view sync state" on public.sync_state;
+create policy "Authenticated users can view sync state"
+  on public.sync_state for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage sync state" on public.sync_state;
+create policy "Authenticated users can manage sync state"
+  on public.sync_state for all
+  to authenticated, anon
+  using (true)
+  with check (true);
 
 -- 7. Service waivers (from migrations)
 -- Track if a guest has an active waiver for shower, laundry, or bicycle
