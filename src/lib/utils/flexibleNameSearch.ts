@@ -9,9 +9,7 @@ import { createSearchIndex, searchWithIndex, getCachedNameParts, SearchIndex, Se
 
 // Cache for the search index with content-aware invalidation
 // Using 'any' for the cache to support different guest types
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cachedIndex: SearchIndex<any> | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cachedGuestsRef: any[] | null = null;
 let cachedGuestCount = 0;
 let cachedGuestIdSet = new Set<string>();
