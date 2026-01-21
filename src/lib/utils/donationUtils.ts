@@ -7,6 +7,14 @@ export const DENSITY_SERVINGS = {
 
 export const MINIMAL_TYPES = new Set(["School Lunch", "Pastries", "Deli Foods"]);
 
+const formatLocalDateKey = (date: Date) => {
+    if (Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
 export const calculateServings = (type: string, weightLbs: any, trays: any = 0, density: any = "medium") => {
     const parsedTrays = Number(trays) || 0;
     if (parsedTrays > 0) {
@@ -50,37 +58,16 @@ export const deriveDonationDateKey = (record: any, DATE_ONLY_REGEX = /^\d{4}-\d{
                 return trimmed;
             }
             const parsed = new Date(trimmed);
-            if (!Number.isNaN(parsed.getTime())) {
-                const formatter = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: "America/Los_Angeles",
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                });
-                return formatter.format(parsed);
-            }
+            const localKey = formatLocalDateKey(parsed);
+            if (localKey) return localKey;
         } else if (value instanceof Date) {
-            if (!Number.isNaN(value.getTime())) {
-                const formatter = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: "America/Los_Angeles",
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                });
-                return formatter.format(value);
-            }
+            const localKey = formatLocalDateKey(value);
+            if (localKey) return localKey;
         } else {
             // timestamp?
             const parsed = new Date(value);
-            if (!Number.isNaN(parsed.getTime())) {
-                const formatter = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: "America/Los_Angeles",
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                });
-                return formatter.format(parsed);
-            }
+            const localKey = formatLocalDateKey(parsed);
+            if (localKey) return localKey;
         }
     }
     return null;
