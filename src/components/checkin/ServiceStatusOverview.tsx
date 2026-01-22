@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { ShowerHead, WashingMachine } from 'lucide-react';
@@ -10,6 +10,24 @@ import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useBlockedSlotsStore } from '@/stores/useBlockedSlotsStore';
 import { todayPacificDateString, pacificDateStringFrom } from '@/lib/utils/date';
 import { generateShowerSlots, generateLaundrySlots, formatSlotLabel } from '@/lib/utils/serviceSlots';
+
+// Subscribe to array lengths to ensure re-renders when records change
+// This is a workaround for potential subscription issues with complex selectors
+const useShowerRecordsLength = () => {
+    return useSyncExternalStore(
+        useServicesStore.subscribe,
+        () => useServicesStore.getState().showerRecords.length,
+        () => useServicesStore.getState().showerRecords.length
+    );
+};
+
+const useLaundryRecordsLength = () => {
+    return useSyncExternalStore(
+        useServicesStore.subscribe,
+        () => useServicesStore.getState().laundryRecords.length,
+        () => useServicesStore.getState().laundryRecords.length
+    );
+};
 
 interface ServiceStatusOverviewProps {
     onShowerClick?: () => void;
@@ -70,6 +88,10 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
     const { targets } = useSettingsStore();
     const todayString = todayPacificDateString();
 
+    // Force re-render when record counts change (ensures reactivity)
+    const showerRecordsLength = useShowerRecordsLength();
+    const laundryRecordsLength = useLaundryRecordsLength();
+
     const allShowerSlots = useMemo(() => generateShowerSlots(), []);
     const allLaundrySlots = useMemo(() => generateLaundrySlots(), []);
     const { isSlotBlocked, blockedSlots } = useBlockedSlotsStore();
@@ -115,7 +137,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
             isFull: available === 0,
             isNearlyFull: available <= 2 && available > 0,
         };
-    }, [showerRecords, allShowerSlots, todayString, blockedShowerSlotsCount]);
+    }, [showerRecords, allShowerSlots, todayString, blockedShowerSlotsCount, showerRecordsLength]);
 
     // Calculate laundry statistics
     const laundryStats = useMemo(() => {
@@ -137,7 +159,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
             isFull: onsiteAvailable === 0,
             isNearlyFull: onsiteAvailable === 1,
         };
-    }, [laundryRecords, todayString, targets, blockedLaundrySlotsCount]);
+    }, [laundryRecords, todayString, targets, blockedLaundrySlotsCount, laundryRecordsLength]);
 
     // Find next available shower slot
     const nextAvailableShowerSlot = useMemo(() => {
@@ -158,7 +180,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
             if ((slotCounts[slot] || 0) < 2) return slot;
         }
         return null;
-    }, [allShowerSlots, showerRecords, todayString, showerStats.available, isSlotBlocked]);
+    }, [allShowerSlots, showerRecords, todayString, showerStats.available, isSlotBlocked, showerRecordsLength]);
 
     // Find next available laundry slot
     const nextAvailableLaundrySlot = useMemo(() => {
@@ -178,7 +200,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
             if (!bookedLaundrySlots.has(slot)) return slot;
         }
         return null;
-    }, [allLaundrySlots, laundryRecords, todayString, laundryStats.onsiteAvailable, isSlotBlocked]);
+    }, [allLaundrySlots, laundryRecords, todayString, laundryStats.onsiteAvailable, isSlotBlocked, laundryRecordsLength]);
 
     const nextShowerSlotLabel = nextAvailableShowerSlot
         ? `Next slot: ${formatSlotLabel(nextAvailableShowerSlot)}`
