@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from 'react';
-import { Search, UserPlus, X, Users, Loader2 } from 'lucide-react';
+import { Search, UserPlus, X, Users, Loader2, RefreshCw } from 'lucide-react';
 import { useGuestsStore, Guest } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
@@ -16,6 +16,7 @@ import { TodayStats } from '@/components/checkin/TodayStats';
 import { useTodayStatusMaps } from '@/stores/selectors/todayStatusSelectors';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils/cn';
+import toast from 'react-hot-toast';
 
 // Threshold for disabling animations for better performance
 const LARGE_LIST_THRESHOLD = 20;
@@ -27,6 +28,7 @@ export default function CheckInPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: null, direction: 'asc' });
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [defaultLocation, setDefaultLocation] = useState('');
@@ -44,18 +46,23 @@ export default function CheckInPage() {
     // Precomputed status maps for efficient per-guest lookups
     const { mealStatus, serviceStatus, actionStatus, recentGuests } = useTodayStatusMaps();
 
+    // Shared function to load all data
+    const loadAllData = useCallback(async () => {
+        await Promise.all([
+            loadGuests(),
+            loadGuestWarningsFromSupabase(),
+            loadGuestProxiesFromSupabase(),
+            loadMeals(),
+            loadServices()
+        ]);
+    }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices]);
+
     // Initial data load
     useEffect(() => {
         const init = async () => {
             setIsLoading(true);
             try {
-                await Promise.all([
-                    loadGuests(),
-                    loadGuestWarningsFromSupabase(),
-                    loadGuestProxiesFromSupabase(),
-                    loadMeals(),
-                    loadServices()
-                ]);
+                await loadAllData();
             } catch (error) {
                 console.error('Failed to load initial data:', error);
             } finally {
@@ -63,7 +70,22 @@ export default function CheckInPage() {
             }
         };
         init();
-    }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices]);
+    }, [loadAllData]);
+
+    // Refresh handler
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        const toastId = toast.loading('Refreshing data...');
+        try {
+            await loadAllData();
+            toast.success('Data refreshed successfully', { id: toastId });
+        } catch (error) {
+            console.error('Failed to refresh data:', error);
+            toast.error('Failed to refresh data', { id: toastId });
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [loadAllData]);
 
     // Search logic using the migrated flexibleNameSearch (with deferred value)
     // Deduplicate results to prevent duplicate key React errors
@@ -236,7 +258,19 @@ export default function CheckInPage() {
                     </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                    <MealServiceTimer />
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleRefresh}
+                            disabled={isRefreshing}
+                            className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            title="Refresh data"
+                            aria-label="Refresh all check-in data"
+                            aria-pressed={isRefreshing}
+                        >
+                            <RefreshCw size={16} className={cn("text-gray-600", isRefreshing && "animate-spin")} />
+                        </button>
+                        <MealServiceTimer />
+                    </div>
                     <TodayStats />
                 </div>
             </div>
