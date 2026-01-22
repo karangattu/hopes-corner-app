@@ -58,6 +58,8 @@ vi.mock('@/lib/utils/date', () => ({
         if (typeof date === 'string') return date.split('T')[0];
         return '2026-01-22';
     }),
+    formatTimeInPacific: () => '12:00 PM',
+    formatPacificTimeString: (timeStr: string) => timeStr,
 }));
 
 vi.mock('@/lib/utils/serviceSlots', () => ({
