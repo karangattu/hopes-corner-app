@@ -87,6 +87,8 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
     const { showerRecords, laundryRecords } = useServicesStore();
     const { targets } = useSettingsStore();
     const todayString = todayPacificDateString();
+    const getRecordDate = (record: { date?: string | null; scheduledFor?: string | null }) =>
+        record.date || record.scheduledFor || null;
 
     // Force re-render when record counts change (ensures reactivity)
     const showerRecordsLength = useShowerRecordsLength();
@@ -114,7 +116,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
     const showerStats = useMemo(() => {
         const todaysRecords = (showerRecords || []).filter(
             (record: any) =>
-                pacificDateStringFrom(record.scheduledFor || record.date) === todayString &&
+                pacificDateStringFrom(getRecordDate(record) || new Date()) === todayString &&
                 record.status !== 'waitlisted'
         );
 
@@ -126,7 +128,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
         const waitlisted = (showerRecords || []).filter(
             (record: any) =>
                 record.status === 'waitlisted' &&
-                pacificDateStringFrom(record.scheduledFor || record.date) === todayString
+                pacificDateStringFrom(getRecordDate(record) || new Date()) === todayString
         ).length;
 
         return {
@@ -143,7 +145,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
     const laundryStats = useMemo(() => {
         const maxSlots = targets?.maxOnsiteLaundrySlots ?? 5;
         const todaysRecords = (laundryRecords || []).filter(
-            (record: any) => pacificDateStringFrom(record.scheduledFor || record.date) === todayString
+            (record: any) => pacificDateStringFrom(getRecordDate(record) || new Date()) === todayString
         );
         const onsiteSlotsTaken = todaysRecords.filter(
             (record: any) => (record.laundryType === 'onsite' || !record.laundryType)
@@ -167,7 +169,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
         const inactiveStatuses = new Set(['waitlisted', 'cancelled', 'done']);
         const todayActiveRecords = (showerRecords || []).filter(
             (record: any) =>
-                pacificDateStringFrom(record.scheduledFor || record.date) === todayString &&
+                pacificDateStringFrom(getRecordDate(record) || new Date()) === todayString &&
                 !inactiveStatuses.has(record.status)
         );
         const slotCounts: Record<string, number> = {};
@@ -188,7 +190,7 @@ export function ServiceStatusOverview({ onShowerClick, onLaundryClick }: Service
         const activeLaundryStatuses = new Set(['waiting', 'washer', 'dryer']);
         const todayLaundryRecords = (laundryRecords || []).filter(
             (record: any) =>
-                pacificDateStringFrom(record.scheduledFor || record.date) === todayString &&
+                pacificDateStringFrom(getRecordDate(record) || new Date()) === todayString &&
                 record.laundryType === 'onsite' &&
                 activeLaundryStatuses.has(record.status)
         );
