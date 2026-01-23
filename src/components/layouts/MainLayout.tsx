@@ -8,6 +8,7 @@ import { ClipboardList, BarChart3, UserPlus, HelpCircle, LogOut, Menu, X } from 
 import { getRoleLabel, ROLE_ACCESS, type UserRole } from '@/lib/auth/types';
 import { AppVersion } from '@/components/pwa/AppVersion';
 import { TutorialModal } from '@/components/modals/TutorialModal';
+import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 
 interface NavItem {
     id: string;
@@ -27,6 +28,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     const pathname = usePathname();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showTutorial, setShowTutorial] = useState(false);
+
+    // Set up realtime subscriptions for multi-device sync
+    useRealtimeSync();
 
     const role = (session?.user?.role as UserRole) || 'checkin';
     const roleLabel = getRoleLabel(role);

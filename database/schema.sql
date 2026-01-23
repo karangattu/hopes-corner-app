@@ -1269,3 +1269,222 @@ drop trigger if exists trg_profiles_updated_at on public.profiles;
 create trigger trg_profiles_updated_at
 before update on public.profiles
 for each row execute function public.touch_updated_at();
+
+-- ============================================
+-- 9. SLOT CAPACITY CONSTRAINTS
+-- Prevents race conditions when multiple staff book the same slot simultaneously
+-- ============================================
+
+-- SHOWER SLOT CAPACITY CONSTRAINT
+-- Limits to 2 guests per slot (configurable)
+create or replace function public.check_shower_slot_capacity()
+returns trigger as $$
+declare
+    slot_count integer;
+    max_capacity integer := 2; -- Configure max guests per shower slot
+begin
+    -- Only check for new bookings and status changes to active statuses
+    if new.status in ('booked', 'waitlisted', 'awaiting') then
+        -- Count existing active bookings for this slot
+        select count(*) into slot_count
+        from public.shower_reservations
+        where scheduled_for = new.scheduled_for
+          and scheduled_time = new.scheduled_time
+          and scheduled_time is not null
+          and status in ('booked', 'awaiting')
+          and id != coalesce(new.id, '00000000-0000-0000-0000-000000000000'::uuid);
+        
+        -- For new 'booked' records, check capacity
+        if new.status = 'booked' and slot_count >= max_capacity then
+            raise exception 'Shower slot % on % is at full capacity (% of % slots taken)', 
+                new.scheduled_time, new.scheduled_for, slot_count, max_capacity
+                using errcode = 'P0001';
+        end if;
+    end if;
+    
+    return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_shower_slot_capacity on public.shower_reservations;
+create trigger trg_shower_slot_capacity
+before insert or update on public.shower_reservations
+for each row execute function public.check_shower_slot_capacity();
+
+comment on function public.check_shower_slot_capacity() is 
+'Trigger function to enforce max 2 guests per shower time slot. Prevents race conditions when multiple staff book simultaneously.';
+
+-- LAUNDRY SLOT CAPACITY CONSTRAINT  
+-- Limits to 2 guests per slot for onsite laundry
+create or replace function public.check_laundry_slot_capacity()
+returns trigger as $$
+declare
+    slot_count integer;
+    max_capacity integer := 2; -- Configure max guests per laundry slot
+begin
+    -- Only check for onsite laundry with a slot
+    if new.laundry_type = 'onsite' and new.slot_label is not null then
+        -- Only check active statuses
+        if new.status in ('waiting', 'washer', 'dryer') then
+            -- Count existing active bookings for this slot
+            select count(*) into slot_count
+            from public.laundry_bookings
+            where scheduled_for = new.scheduled_for
+              and slot_label = new.slot_label
+              and laundry_type = 'onsite'
+              and status in ('waiting', 'washer', 'dryer')
+              and id != coalesce(new.id, '00000000-0000-0000-0000-000000000000'::uuid);
+            
+            if slot_count >= max_capacity then
+                raise exception 'Laundry slot % on % is at full capacity (% of % slots taken)', 
+                    new.slot_label, new.scheduled_for, slot_count, max_capacity
+                    using errcode = 'P0001';
+            end if;
+        end if;
+    end if;
+    
+    return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_laundry_slot_capacity on public.laundry_bookings;
+create trigger trg_laundry_slot_capacity
+before insert or update on public.laundry_bookings
+for each row execute function public.check_laundry_slot_capacity();
+
+comment on function public.check_laundry_slot_capacity() is 
+'Trigger function to enforce max 2 guests per laundry time slot for onsite laundry. Prevents race conditions when multiple staff book simultaneously.';
+
+-- HELPER FUNCTION: Get available shower slots
+-- Returns slots that have capacity available
+create or replace function public.get_available_shower_slots(
+    check_date date,
+    max_per_slot integer default 2
+)
+returns table (
+    slot_time text,
+    current_count bigint,
+    available_spots integer
+) as $$
+begin
+    return query
+    with all_slots as (
+        -- Generate common time slots (7:30 AM to 11:30 AM in 30-min increments)
+        select unnest(array[
+            '07:30', '08:00', '08:30', '09:00', '09:30', 
+            '10:00', '10:30', '11:00', '11:30'
+        ]) as time_slot
+    ),
+    booked_slots as (
+        select 
+            scheduled_time,
+            count(*) as booked_count
+        from public.shower_reservations
+        where scheduled_for = check_date
+          and status in ('booked', 'awaiting')
+          and scheduled_time is not null
+        group by scheduled_time
+    )
+    select 
+        all_slots.time_slot as slot_time,
+        coalesce(booked_slots.booked_count, 0) as current_count,
+        (max_per_slot - coalesce(booked_slots.booked_count, 0))::integer as available_spots
+    from all_slots
+    left join booked_slots on all_slots.time_slot = booked_slots.scheduled_time
+    order by all_slots.time_slot;
+end;
+$$ language plpgsql;
+
+-- HELPER FUNCTION: Get available laundry slots
+-- Returns slots that have capacity available
+create or replace function public.get_available_laundry_slots(
+    check_date date,
+    max_per_slot integer default 2
+)
+returns table (
+    slot_label text,
+    current_count bigint,
+    available_spots integer
+) as $$
+begin
+    return query
+    with all_slots as (
+        -- Generate common time slots
+        select unnest(array[
+            '07:30', '08:00', '08:30', '09:00', '09:30', 
+            '10:00', '10:30', '11:00'
+        ]) as time_slot
+    ),
+    booked_slots as (
+        select 
+            lb.slot_label as slot,
+            count(*) as booked_count
+        from public.laundry_bookings lb
+        where lb.scheduled_for = check_date
+          and lb.laundry_type = 'onsite'
+          and lb.status in ('waiting', 'washer', 'dryer')
+          and lb.slot_label is not null
+        group by lb.slot_label
+    )
+    select 
+        all_slots.time_slot as slot_label,
+        coalesce(booked_slots.booked_count, 0) as current_count,
+        (max_per_slot - coalesce(booked_slots.booked_count, 0))::integer as available_spots
+    from all_slots
+    left join booked_slots on all_slots.time_slot = booked_slots.slot
+    order by all_slots.time_slot;
+end;
+$$ language plpgsql;
+
+-- ============================================
+-- 10. ENABLE REALTIME FOR TABLES
+-- Required for Supabase Realtime subscriptions (cross-device sync)
+-- Note: If tables are already in the publication, these will error safely
+-- ============================================
+
+-- Enable realtime for critical tables
+do $$
+begin
+  -- Add tables to realtime publication if not already added
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'shower_reservations'
+  ) then
+    alter publication supabase_realtime add table public.shower_reservations;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'laundry_bookings'
+  ) then
+    alter publication supabase_realtime add table public.laundry_bookings;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'meal_attendance'
+  ) then
+    alter publication supabase_realtime add table public.meal_attendance;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'bicycle_repairs'
+  ) then
+    alter publication supabase_realtime add table public.bicycle_repairs;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'guests'
+  ) then
+    alter publication supabase_realtime add table public.guests;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'guest_warnings'
+  ) then
+    alter publication supabase_realtime add table public.guest_warnings;
+  end if;
+end $$;
