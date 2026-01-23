@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     // Empty config to silence warnings
   },
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
   images: {
     domains: [],
   },
