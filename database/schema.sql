@@ -1284,14 +1284,14 @@ declare
     max_capacity integer := 2; -- Configure max guests per shower slot
 begin
     -- Only check for new bookings and status changes to active statuses
-    if new.status in ('booked', 'waitlisted', 'awaiting') then
+    if new.status in ('booked', 'waitlisted') then
         -- Count existing active bookings for this slot
         select count(*) into slot_count
         from public.shower_reservations
         where scheduled_for = new.scheduled_for
           and scheduled_time = new.scheduled_time
           and scheduled_time is not null
-          and status in ('booked', 'awaiting')
+          and status in ('booked')
           and id != coalesce(new.id, '00000000-0000-0000-0000-000000000000'::uuid);
         
         -- For new 'booked' records, check capacity
@@ -1381,7 +1381,7 @@ begin
             count(*) as booked_count
         from public.shower_reservations
         where scheduled_for = check_date
-          and status in ('booked', 'awaiting')
+          and status in ('booked')
           and scheduled_time is not null
         group by scheduled_time
     )

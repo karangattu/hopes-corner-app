@@ -19,12 +19,11 @@ describe('Shower Slot Capacity Constraints', () => {
         });
 
         it('should only count active statuses towards capacity', () => {
-            const ACTIVE_STATUSES = ['booked', 'awaiting'];
+            const ACTIVE_STATUSES = ['booked'];
             const INACTIVE_STATUSES = ['done', 'cancelled', 'no_show', 'waitlisted'];
             
             // Active statuses count towards capacity
             expect(ACTIVE_STATUSES).toContain('booked');
-            expect(ACTIVE_STATUSES).toContain('awaiting');
             
             // Inactive statuses don't count
             expect(INACTIVE_STATUSES).toContain('cancelled');
@@ -36,7 +35,7 @@ describe('Shower Slot Capacity Constraints', () => {
             // Waitlisted guests don't have a specific time slot assigned
             // They should not count towards slot capacity
             const status = 'waitlisted';
-            const countsTowardsCapacity = ['booked', 'awaiting'].includes(status);
+            const countsTowardsCapacity = ['booked'].includes(status);
             expect(countsTowardsCapacity).toBe(false);
         });
 
