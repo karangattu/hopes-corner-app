@@ -25,7 +25,7 @@ export function ShowersSection() {
 
     const today = todayPacificDateString();
     const [selectedDate, setSelectedDate] = useState(today);
-    const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'waitlist'>('active');
+    const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'waitlist' | 'cancelled'>('active');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [selectedShower, setSelectedShower] = useState<any>(null);
     const [showSlotManager, setShowSlotManager] = useState(false);
@@ -61,6 +61,7 @@ export function ShowersSection() {
     const activeShowers = selectedDateRecords.filter(r => r.status === 'booked' || r.status === 'awaiting');
     const completedShowers = selectedDateRecords.filter(r => r.status === 'done');
     const waitlistedShowers = selectedDateRecords.filter(r => r.status === 'waitlisted');
+    const cancelledShowers = selectedDateRecords.filter(r => r.status === 'cancelled' || r.status === 'no_show');
     
     // For today only - pending showers for end-of-day cancellation
     const todaysRecords = showerRecords.filter(
@@ -68,7 +69,7 @@ export function ShowersSection() {
     );
     const pendingShowers = todaysRecords.filter(r => r.status !== 'done' && r.status !== 'cancelled');
 
-    const currentList = activeTab === 'active' ? activeShowers : activeTab === 'completed' ? completedShowers : waitlistedShowers;
+    const currentList = activeTab === 'active' ? activeShowers : activeTab === 'completed' ? completedShowers : activeTab === 'waitlist' ? waitlistedShowers : cancelledShowers;
 
     const handleEndShowerDay = async () => {
         if (pendingShowers.length === 0) {
@@ -131,7 +132,7 @@ export function ShowersSection() {
 
                     {/* Tab Navigation */}
                     <div className="flex p-1 bg-gray-100 rounded-2xl w-fit">
-                        {(['active', 'completed', 'waitlist'] as const).map((tab) => (
+                        {(['active', 'completed', 'waitlist', 'cancelled'] as const).map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -144,7 +145,7 @@ export function ShowersSection() {
                             >
                                 {tab}
                                 <span className="ml-2 text-[10px] opacity-60">
-                                    ({tab === 'active' ? activeShowers.length : tab === 'completed' ? completedShowers.length : waitlistedShowers.length})
+                                    ({tab === 'active' ? activeShowers.length : tab === 'completed' ? completedShowers.length : tab === 'waitlist' ? waitlistedShowers.length : cancelledShowers.length})
                                 </span>
                             </button>
                         ))}
@@ -307,12 +308,16 @@ function ShowerListItem({ record, guest, onClick, readOnly = false }: { record: 
                 <div className="flex items-center gap-3">
                     <div className={cn(
                         "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg shadow-sky-100",
-                        record.status === 'done' ? 'bg-emerald-500' : 'bg-sky-500'
+                        record.status === 'done' ? 'bg-emerald-500' : 
+                        (record.status === 'cancelled' || record.status === 'no_show') ? 'bg-gray-400' : 'bg-sky-500'
                     )}>
                         <User size={20} />
                     </div>
                     <div>
-                        <h4 className="font-black text-gray-900 tracking-tight">
+                        <h4 className={cn(
+                            "font-black tracking-tight",
+                            (record.status === 'cancelled' || record.status === 'no_show') ? 'text-gray-400' : 'text-gray-900'
+                        )}>
                             {guest ? (guest.preferredName || guest.name) : 'Unknown Guest'}
                         </h4>
                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
@@ -323,12 +328,13 @@ function ShowerListItem({ record, guest, onClick, readOnly = false }: { record: 
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Waiver indicator for non-completed showers */}
-                    {record.status !== 'done' && (
+                    {record.status !== 'done' && record.status !== 'cancelled' && record.status !== 'no_show' && (
                         <CompactWaiverIndicator guestId={record.guestId} serviceType="shower" />
                     )}
                     <div className={cn(
                         "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
-                        record.status === 'done' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-600'
+                        record.status === 'done' ? 'bg-emerald-50 text-emerald-600' : 
+                        (record.status === 'cancelled' || record.status === 'no_show') ? 'bg-red-50 text-red-500' : 'bg-sky-50 text-sky-600'
                     )}>
                         {record.status.replace('_', ' ')}
                     </div>
@@ -336,7 +342,7 @@ function ShowerListItem({ record, guest, onClick, readOnly = false }: { record: 
             </div>
 
             <div className="flex items-center gap-2 mt-auto">
-                {record.status !== 'done' && !readOnly && (
+                {record.status !== 'done' && record.status !== 'cancelled' && record.status !== 'no_show' && !readOnly && (
                     <>
                         <button
                             disabled={isUpdating}
@@ -367,6 +373,19 @@ function ShowerListItem({ record, guest, onClick, readOnly = false }: { record: 
                         {isUpdating ? <Loader2 className="animate-spin" size={14} /> : (
                             <>
                                 <RotateCcw size={14} /> REOPEN
+                            </>
+                        )}
+                    </button>
+                )}
+                {(record.status === 'cancelled' || record.status === 'no_show') && !readOnly && (
+                    <button
+                        disabled={isUpdating}
+                        onClick={() => handleStatusUpdate('booked')}
+                        className="w-full py-2 rounded-xl bg-gray-50 text-gray-500 hover:bg-sky-50 hover:text-sky-600 text-xs font-black flex items-center justify-center gap-2 transition-all"
+                    >
+                        {isUpdating ? <Loader2 className="animate-spin" size={14} /> : (
+                            <>
+                                <RotateCcw size={14} /> REBOOK
                             </>
                         )}
                     </button>
