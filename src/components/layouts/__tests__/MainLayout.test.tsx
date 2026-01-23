@@ -17,6 +17,12 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 
+// Mock useRealtimeSync hook
+vi.mock('@/hooks/useRealtimeSync', () => ({
+    useRealtimeSync: vi.fn(),
+    RealtimeSyncProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 // Mock Lucide icons
 vi.mock('lucide-react', async (importOriginal) => {
     const actual = await importOriginal<typeof import('lucide-react')>();
