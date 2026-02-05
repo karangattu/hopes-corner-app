@@ -24,12 +24,15 @@ import {
     Gift,
     Calendar,
     ArrowUp,
-    ArrowDown
+    ArrowDown,
+    StickyNote
 } from 'lucide-react';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useDonationsStore } from '@/stores/useDonationsStore';
+import { useDailyNotesStore, DailyNote } from '@/stores/useDailyNotesStore';
+import { useModalStore } from '@/stores/useModalStore';
 import { cn } from '@/lib/utils/cn';
 
 // Time range presets
@@ -65,6 +68,8 @@ export function AnalyticsSection() {
     const { showerRecords, laundryRecords, bicycleRecords } = useServicesStore();
     const { guests } = useGuestsStore();
     useDonationsStore();
+    const { getNotesForDateRange, loadFromSupabase: loadDailyNotes } = useDailyNotesStore();
+    const { openNoteModal } = useModalStore();
 
     const [isMounted, setIsMounted] = useState(false);
     const [activeView, setActiveView] = useState('overview');
@@ -82,6 +87,11 @@ export function AnalyticsSection() {
         const timer = setTimeout(() => setIsMounted(true), 0);
         return () => clearTimeout(timer);
     }, []);
+
+    // Load daily notes on mount
+    useEffect(() => {
+        loadDailyNotes();
+    }, [loadDailyNotes]);
 
     // Calculate date range based on preset or custom dates
     const dateRange = useMemo(() => {
@@ -196,9 +206,11 @@ export function AnalyticsSection() {
 
     // Daily breakdown for trends
     const dailyData = useMemo(() => {
-        const days: { date: string, meals: number, showers: number, laundry: number, bicycles: number }[] = [];
+        const days: { date: string, fullDate: string, meals: number, showers: number, laundry: number, bicycles: number, hasNote: boolean }[] = [];
         const start = new Date(dateRange.start);
         const end = new Date(dateRange.end);
+        const notesInRange = getNotesForDateRange(dateRange.start, dateRange.end);
+        const noteDates = new Set(notesInRange.map(n => n.noteDate));
 
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
             const dateStr = d.toISOString().split('T')[0];
@@ -212,14 +224,21 @@ export function AnalyticsSection() {
 
             days.push({
                 date: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                fullDate: dateStr,
                 meals: dayMeals,
                 showers: dayShowers,
                 laundry: dayLaundry,
-                bicycles: dayBicycles
+                bicycles: dayBicycles,
+                hasNote: noteDates.has(dateStr)
             });
         }
         return days;
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, bicycleRecords]);
+    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, bicycleRecords, getNotesForDateRange]);
+
+    // Notes summary for the selected date range
+    const notesInRange = useMemo(() => {
+        return getNotesForDateRange(dateRange.start, dateRange.end);
+    }, [dateRange.start, dateRange.end, getNotesForDateRange]);
 
     // Demographics
     const demographics = useMemo(() => {
@@ -371,8 +390,86 @@ export function AnalyticsSection() {
                     {dateRange.days} day{dateRange.days !== 1 ? 's' : ''} from {new Date(dateRange.start).toLocaleDateString()} to {new Date(dateRange.end).toLocaleDateString()}
                 </p>
             </div>
+
+            {/* Daily Notes Summary */}
+            {notesInRange.length > 0 && (
+                <div className="bg-amber-50 rounded-2xl p-6 border border-amber-200">
+                    <div className="flex items-center gap-3 mb-4">
+                        <StickyNote size={20} className="text-amber-600" />
+                        <h3 className="text-sm font-black text-amber-800 uppercase tracking-wider">
+                            Operational Notes ({notesInRange.length})
+                        </h3>
+                    </div>
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                        {notesInRange.map((note: DailyNote) => (
+                            <button
+                                key={note.id}
+                                onClick={() => openNoteModal(note.noteDate, note.serviceType)}
+                                className="w-full text-left p-3 bg-white rounded-xl border border-amber-100 hover:border-amber-300 transition-colors"
+                            >
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-bold text-amber-600">
+                                        {new Date(note.noteDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                    </span>
+                                    <span className={cn(
+                                        "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase",
+                                        note.serviceType === 'meals' && "bg-orange-100 text-orange-700",
+                                        note.serviceType === 'showers' && "bg-sky-100 text-sky-700",
+                                        note.serviceType === 'laundry' && "bg-violet-100 text-violet-700",
+                                        note.serviceType === 'general' && "bg-gray-100 text-gray-700"
+                                    )}>
+                                        {note.serviceType}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-gray-700 line-clamp-2">{note.noteText}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
+
+    // Custom tooltip for trends chart that shows notes
+    const CustomChartTooltip = ({ active, payload, label }: {
+        active?: boolean;
+        payload?: Array<{ name: string; value: number; color: string; dataKey: string }>;
+        label?: string;
+    }) => {
+        if (!active || !payload || payload.length === 0) return null;
+
+        // Find the full date from the payload
+        const dataPoint = dailyData.find(d => d.date === label);
+        const fullDate = dataPoint?.fullDate;
+        const dayNotes = fullDate ? getNotesForDateRange(fullDate, fullDate) : [];
+
+        return (
+            <div className="bg-white/95 backdrop-blur-sm p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm min-w-[180px]">
+                <p className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                    {label}
+                    {dataPoint?.hasNote && <StickyNote size={12} className="text-amber-500" />}
+                </p>
+                {payload.map((entry) => (
+                    <div key={entry.name} className="flex items-center gap-2 mb-1">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <span className="text-gray-600 capitalize">{entry.name}:</span>
+                        <span className="font-semibold">{entry.value}</span>
+                    </div>
+                ))}
+                {dayNotes.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                        <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-2">📝 Notes</p>
+                        {dayNotes.map((note: DailyNote) => (
+                            <div key={note.id} className="text-xs text-gray-600 mb-1">
+                                <span className="font-medium text-gray-700 capitalize">{note.serviceType}:</span>{' '}
+                                <span className="line-clamp-2">{note.noteText}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     // Render Trends
     const renderTrends = () => (
@@ -380,6 +477,12 @@ export function AnalyticsSection() {
             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
                 <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                     <TrendingUp size={16} /> Service Trends
+                    {dailyData.some(d => d.hasNote) && (
+                        <span className="text-amber-500 flex items-center gap-1 text-[10px] font-bold bg-amber-50 px-2 py-0.5 rounded-full">
+                            <StickyNote size={10} />
+                            {dailyData.filter(d => d.hasNote).length} days with notes
+                        </span>
+                    )}
                 </h3>
                 <div className="h-[400px] w-full">
                     {isMounted && dailyData.length > 0 ? (
@@ -402,7 +505,7 @@ export function AnalyticsSection() {
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
-                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.15)' }} />
+                                <Tooltip content={<CustomChartTooltip />} />
                                 <Legend />
                                 {selectedPrograms.includes('meals') && (
                                     <Area type="monotone" dataKey="meals" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorMeals)" />

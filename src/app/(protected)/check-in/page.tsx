@@ -6,6 +6,7 @@ import { useGuestsStore, Guest } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useRemindersStore } from '@/stores/useRemindersStore';
+import { useDailyNotesStore } from '@/stores/useDailyNotesStore';
 import { flexibleNameSearch } from '@/lib/utils/flexibleNameSearch';
 import { findFuzzySuggestions } from '@/lib/utils/fuzzyMatch';
 import { GuestCard } from '@/components/guests/GuestCard';
@@ -14,6 +15,7 @@ import { ServiceStatusOverview } from '@/components/checkin/ServiceStatusOvervie
 import { KeyboardShortcutsBar } from '@/components/checkin/KeyboardShortcutsBar';
 import { MealServiceTimer } from '@/components/checkin/MealServiceTimer';
 import { TodayStats } from '@/components/checkin/TodayStats';
+import { DailyNotesSection } from '@/components/checkin/DailyNotesSection';
 import { useTodayStatusMaps } from '@/stores/selectors/todayStatusSelectors';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils/cn';
@@ -43,6 +45,7 @@ export default function CheckInPage() {
     const { loadFromSupabase: loadMeals } = useMealsStore();
     const { loadFromSupabase: loadServices } = useServicesStore();
     const { loadFromSupabase: loadReminders } = useRemindersStore();
+    const { loadFromSupabase: loadDailyNotes } = useDailyNotesStore();
 
     // Precomputed status maps for efficient per-guest lookups
     const { mealStatus, serviceStatus, actionStatus, recentGuests } = useTodayStatusMaps();
@@ -55,9 +58,10 @@ export default function CheckInPage() {
             loadGuestProxiesFromSupabase(),
             loadMeals(),
             loadServices(),
-            loadReminders()
+            loadReminders(),
+            loadDailyNotes()
         ]);
-    }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices, loadReminders]);
+    }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices, loadReminders, loadDailyNotes]);
 
     // Initial data load
     useEffect(() => {
@@ -254,6 +258,9 @@ export default function CheckInPage() {
 
             {/* Service Status Overview */}
             <ServiceStatusOverview />
+
+            {/* Daily Notes Section */}
+            <DailyNotesSection />
 
             {/* Search Header */}
             <div className="bg-white rounded-2xl shadow-xl shadow-emerald-900/5 border border-emerald-100/50 p-6 sm:p-8">

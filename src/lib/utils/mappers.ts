@@ -494,3 +494,25 @@ export const mapGuestReminderRow = (row: GuestReminderRow) => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+interface DailyNoteRow {
+  id: string;
+  note_date: string;
+  service_type: 'meals' | 'showers' | 'laundry' | 'general';
+  note_text: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const mapDailyNoteRow = (row: DailyNoteRow) => ({
+  id: row.id,
+  noteDate: row.note_date,
+  serviceType: row.service_type,
+  noteText: row.note_text,
+  createdBy: row.created_by || null,
+  updatedBy: row.updated_by || null,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});

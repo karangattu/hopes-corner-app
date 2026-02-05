@@ -10,6 +10,7 @@ export type DonationTypeEnum = 'Protein' | 'Carbs' | 'Vegetables' | 'Fruit' | 'V
 export type LaPlazaCategoryEnum = 'Bakery' | 'Beverages' | 'Dairy' | 'Meat' | 'Mix' | 'Nonfood' | 'Prepared/Perishable' | 'Produce';
 export type MealTypeEnum = 'guest' | 'extra' | 'rv' | 'shelter' | 'united_effort' | 'day_worker' | 'lunch_bag';
 export type ShowerStatusEnum = 'booked' | 'waitlisted' | 'done' | 'cancelled' | 'no_show';
+export type DailyNoteServiceType = 'meals' | 'showers' | 'laundry' | 'general';
 
 // Core types
 export interface Guest {
@@ -171,6 +172,28 @@ export interface GuestWarning {
     created_by?: string;
     created_at: string;
     expires_at?: string;
+}
+
+export interface DailyNote {
+    id: string;
+    note_date: string;
+    service_type: DailyNoteServiceType;
+    note_text: string;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface DailyNoteRow {
+    id: string;
+    note_date: string;
+    service_type: DailyNoteServiceType;
+    note_text: string;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
 }
 
 export interface GuestProxy {
