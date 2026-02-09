@@ -1,0 +1,347 @@
+/**
+ * Story wrappers for Playwright Component Testing.
+ *
+ * Because Playwright CT runs components in a real browser while tests
+ * execute in Node.js, we cannot pass complex objects or functions across
+ * the boundary. These wrapper components accept only serialisable props
+ * and wire up Zustand stores, toast, and other browser-side dependencies
+ * internally.
+ */
+import React, { useEffect } from 'react';
+import { TodayStats } from '@/components/checkin/TodayStats';
+import { BanManagementModal } from '@/components/modals/BanManagementModal';
+import { GuestEditModal } from '@/components/modals/GuestEditModal';
+import { GuestCreateModal } from '@/components/guests/GuestCreateModal';
+import { ShowerBookingModal } from '@/components/modals/ShowerBookingModal';
+import { LaundryBookingModal } from '@/components/modals/LaundryBookingModal';
+import { useMealsStore } from '@/stores/useMealsStore';
+import { useGuestsStore } from '@/stores/useGuestsStore';
+import { useModalStore } from '@/stores/useModalStore';
+import { useServicesStore } from '@/stores/useServicesStore';
+import { useActionHistoryStore } from '@/stores/useActionHistoryStore';
+import { useBlockedSlotsStore } from '@/stores/useBlockedSlotsStore';
+import { useRemindersStore } from '@/stores/useRemindersStore';
+// The mock for next-auth/react is resolved via Vite alias in playwright-ct.config.ts
+// @ts-expect-error __setMockSession is exported by our mock, not the real next-auth/react
+import { __setMockSession } from 'next-auth/react';
+
+// ---------------------------------------------------------------------------
+// TodayStats wrapper – seeds the meals store with serialisable data
+// ---------------------------------------------------------------------------
+
+interface TodayStatsStoryProps {
+  mealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+  }>;
+  extraMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+  }>;
+}
+
+export function TodayStatsStory({
+  mealRecords = [],
+  extraMealRecords = [],
+}: TodayStatsStoryProps) {
+  // Seed store before render
+  useEffect(() => {
+    useMealsStore.setState({
+      mealRecords: mealRecords as any,
+      extraMealRecords: extraMealRecords as any,
+    });
+  }, [mealRecords, extraMealRecords]);
+
+  return <TodayStats />;
+}
+
+// ---------------------------------------------------------------------------
+// BanManagementModal wrapper
+// ---------------------------------------------------------------------------
+
+interface BanManagementStoryProps {
+  guest: {
+    id: string;
+    name: string;
+    preferredName?: string;
+    isBanned: boolean;
+    bannedUntil?: string | null;
+    banReason?: string;
+    bannedFromMeals?: boolean;
+    bannedFromShower?: boolean;
+    bannedFromLaundry?: boolean;
+    bannedFromBicycle?: boolean;
+  };
+  /** When the component calls onClose we set this flag visible so tests can detect it */
+}
+
+export function BanManagementStory({ guest }: BanManagementStoryProps) {
+  const [closed, setClosed] = React.useState(false);
+
+  // Provide stub store methods
+  useEffect(() => {
+    useGuestsStore.setState({
+      banGuest: (async () => {}) as any,
+      clearGuestBan: (async () => {}) as any,
+    });
+  }, []);
+
+  if (closed) return <div data-testid="modal-closed">closed</div>;
+
+  return <BanManagementModal guest={guest} onClose={() => setClosed(true)} />;
+}
+
+// ---------------------------------------------------------------------------
+// GuestEditModal wrapper
+// ---------------------------------------------------------------------------
+
+interface GuestEditStoryProps {
+  guest: {
+    id: string;
+    name: string;
+    preferredName?: string;
+    firstName: string;
+    lastName: string;
+    housingStatus?: string;
+    location?: string;
+    age?: string;
+    gender?: string;
+    notes?: string;
+    bicycleDescription?: string;
+  };
+}
+
+export function GuestEditStory({ guest }: GuestEditStoryProps) {
+  const [closed, setClosed] = React.useState(false);
+
+  useEffect(() => {
+    useGuestsStore.setState({
+      updateGuest: (async () => {}) as any,
+    });
+  }, []);
+
+  if (closed) return <div data-testid="modal-closed">closed</div>;
+
+  return <GuestEditModal guest={guest} onClose={() => setClosed(true)} />;
+}
+
+// ---------------------------------------------------------------------------
+// GuestCreateModal wrapper
+// ---------------------------------------------------------------------------
+
+interface GuestCreateStoryProps {
+  initialName?: string;
+  defaultLocation?: string;
+  existingGuests?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    preferredName?: string;
+  }>;
+}
+
+export function GuestCreateStory({
+  initialName = '',
+  defaultLocation = '',
+  existingGuests = [],
+}: GuestCreateStoryProps) {
+  const [closed, setClosed] = React.useState(false);
+
+  useEffect(() => {
+    useGuestsStore.setState({
+      guests: existingGuests as any,
+      addGuest: (async () => {}) as any,
+    });
+  }, [existingGuests]);
+
+  if (closed) return <div data-testid="modal-closed">closed</div>;
+
+  return (
+    <GuestCreateModal
+      onClose={() => setClosed(true)}
+      initialName={initialName}
+      defaultLocation={defaultLocation}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ShowerBookingModal wrapper
+// ---------------------------------------------------------------------------
+
+interface ShowerBookingStoryProps {
+  /** Guest object to set as showerPickerGuest in the modal store */
+  guest: { id: string; name: string; preferredName?: string };
+  /** User role — controls checkin vs staff/admin UI */
+  role?: 'checkin' | 'staff' | 'admin';
+  /** Existing shower records for today's slot occupancy */
+  showerRecords?: Array<{
+    id: string;
+    guestId: string;
+    time?: string;
+    date: string;
+    status: string;
+  }>;
+  /** Blocked slot times (e.g. ['09:00']) */
+  blockedSlots?: Array<{
+    id: string;
+    serviceType: 'shower';
+    slotTime: string;
+    date: string;
+  }>;
+}
+
+export function ShowerBookingStory({
+  guest,
+  role = 'checkin',
+  showerRecords = [],
+  blockedSlots = [],
+}: ShowerBookingStoryProps) {
+  const [closed, setClosed] = React.useState(false);
+
+  useEffect(() => {
+    // Set mock session role
+    (__setMockSession as any)({
+      data: { user: { role, email: 'test@test.com', name: 'Test User' }, expires: '2099-01-01' },
+      status: 'authenticated',
+    });
+
+    // Seed modal store with guest
+    useModalStore.setState({
+      showerPickerGuest: guest,
+      setShowerPickerGuest: ((g: any) => {
+        if (g === null) setClosed(true);
+        useModalStore.setState({ showerPickerGuest: g });
+      }) as any,
+    });
+
+    // Seed services store
+    useServicesStore.setState({
+      showerRecords: showerRecords as any,
+      addShowerRecord: (async () => ({ id: 'new-shower', guestId: guest.id, date: new Date().toISOString(), status: 'booked' })) as any,
+      addShowerWaitlist: (async () => ({ id: 'new-waitlist', guestId: guest.id, date: new Date().toISOString(), status: 'waitlisted' })) as any,
+    });
+
+    // Seed guests store
+    useGuestsStore.setState({
+      guests: [guest] as any,
+    });
+
+    // Seed action history store
+    useActionHistoryStore.setState({
+      addAction: (() => {}) as any,
+    });
+
+    // Seed blocked slots store
+    useBlockedSlotsStore.setState({
+      blockedSlots: blockedSlots as any,
+      fetchBlockedSlots: (async () => {}) as any,
+      isSlotBlocked: ((serviceType: string, slotTime: string, date: string) => {
+        return blockedSlots.some(
+          (b) => b.serviceType === serviceType && b.slotTime === slotTime && b.date === date
+        );
+      }) as any,
+    });
+
+    // Seed reminders store (empty so ServiceCardReminder renders nothing)
+    useRemindersStore.setState({
+      reminders: [],
+      getRemindersForService: (() => []) as any,
+      hasActiveReminder: (() => false) as any,
+    });
+  }, [guest, role, showerRecords, blockedSlots]);
+
+  if (closed) return <div data-testid="modal-closed">closed</div>;
+
+  return <ShowerBookingModal />;
+}
+
+// ---------------------------------------------------------------------------
+// LaundryBookingModal wrapper
+// ---------------------------------------------------------------------------
+
+interface LaundryBookingStoryProps {
+  /** Guest object to set as laundryPickerGuest */
+  guest: { id: string; name: string; preferredName?: string };
+  /** User role */
+  role?: 'checkin' | 'staff' | 'admin';
+  /** Existing laundry records */
+  laundryRecords?: Array<{
+    id: string;
+    guestId: string;
+    time?: string;
+    laundryType?: string;
+    date: string;
+    status: string;
+  }>;
+  /** Blocked slot labels */
+  blockedSlots?: Array<{
+    id: string;
+    serviceType: 'laundry';
+    slotTime: string;
+    date: string;
+  }>;
+}
+
+export function LaundryBookingStory({
+  guest,
+  role = 'checkin',
+  laundryRecords = [],
+  blockedSlots = [],
+}: LaundryBookingStoryProps) {
+  const [closed, setClosed] = React.useState(false);
+
+  useEffect(() => {
+    // Set mock session role
+    (__setMockSession as any)({
+      data: { user: { role, email: 'test@test.com', name: 'Test User' }, expires: '2099-01-01' },
+      status: 'authenticated',
+    });
+
+    // Seed modal store with guest
+    useModalStore.setState({
+      laundryPickerGuest: guest,
+      setLaundryPickerGuest: ((g: any) => {
+        if (g === null) setClosed(true);
+        useModalStore.setState({ laundryPickerGuest: g });
+      }) as any,
+    });
+
+    // Seed services store
+    useServicesStore.setState({
+      laundryRecords: laundryRecords as any,
+      addLaundryRecord: (async () => ({ id: 'new-laundry', guestId: guest.id, date: new Date().toISOString(), status: 'waiting' })) as any,
+    });
+
+    // Seed action history store
+    useActionHistoryStore.setState({
+      addAction: (() => {}) as any,
+    });
+
+    // Seed blocked slots store
+    useBlockedSlotsStore.setState({
+      blockedSlots: blockedSlots as any,
+      fetchBlockedSlots: (async () => {}) as any,
+      isSlotBlocked: ((serviceType: string, slotTime: string, date: string) => {
+        return blockedSlots.some(
+          (b) => b.serviceType === serviceType && b.slotTime === slotTime && b.date === date
+        );
+      }) as any,
+    });
+
+    // Seed reminders store
+    useRemindersStore.setState({
+      reminders: [],
+      getRemindersForService: (() => []) as any,
+      hasActiveReminder: (() => false) as any,
+    });
+  }, [guest, role, laundryRecords, blockedSlots]);
+
+  if (closed) return <div data-testid="modal-closed">closed</div>;
+
+  return <LaundryBookingModal />;
+}
