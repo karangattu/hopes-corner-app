@@ -14,13 +14,18 @@ import { GuestEditModal } from '@/components/modals/GuestEditModal';
 import { GuestCreateModal } from '@/components/guests/GuestCreateModal';
 import { ShowerBookingModal } from '@/components/modals/ShowerBookingModal';
 import { LaundryBookingModal } from '@/components/modals/LaundryBookingModal';
+import { MealsSection } from '@/components/services/MealsSection';
+import { DonationsSection } from '@/components/services/DonationsSection';
+import { BicycleSection } from '@/components/services/BicycleSection';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useModalStore } from '@/stores/useModalStore';
 import { useServicesStore } from '@/stores/useServicesStore';
+import { useDonationsStore } from '@/stores/useDonationsStore';
 import { useActionHistoryStore } from '@/stores/useActionHistoryStore';
 import { useBlockedSlotsStore } from '@/stores/useBlockedSlotsStore';
 import { useRemindersStore } from '@/stores/useRemindersStore';
+import { useWaiverStore } from '@/stores/useWaiverStore';
 // The mock for next-auth/react is resolved via Vite alias in playwright-ct.config.ts
 // @ts-expect-error __setMockSession is exported by our mock, not the real next-auth/react
 import { __setMockSession } from 'next-auth/react';
@@ -344,4 +349,266 @@ export function LaundryBookingStory({
   if (closed) return <div data-testid="modal-closed">closed</div>;
 
   return <LaundryBookingModal />;
+}
+
+// ---------------------------------------------------------------------------
+// MealsSection wrapper
+// ---------------------------------------------------------------------------
+
+interface MealsSectionStoryProps {
+  /** Guest meal records */
+  mealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** RV meal records */
+  rvMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** Extra meal records */
+  extraMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** Day worker records */
+  dayWorkerMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** Shelter meal records */
+  shelterMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** United effort records */
+  unitedEffortMealRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** Lunch bag records */
+  lunchBagRecords?: Array<{
+    id: string;
+    guestId: string;
+    count: number;
+    date: string;
+    createdAt?: string;
+  }>;
+  /** Guests for name resolution */
+  guests?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    preferredName?: string;
+    name?: string;
+  }>;
+}
+
+export function MealsSectionStory({
+  mealRecords = [],
+  rvMealRecords = [],
+  extraMealRecords = [],
+  dayWorkerMealRecords = [],
+  shelterMealRecords = [],
+  unitedEffortMealRecords = [],
+  lunchBagRecords = [],
+  guests = [],
+}: MealsSectionStoryProps) {
+  useEffect(() => {
+    useMealsStore.setState({
+      mealRecords: mealRecords as any,
+      rvMealRecords: rvMealRecords as any,
+      extraMealRecords: extraMealRecords as any,
+      dayWorkerMealRecords: dayWorkerMealRecords as any,
+      shelterMealRecords: shelterMealRecords as any,
+      unitedEffortMealRecords: unitedEffortMealRecords as any,
+      lunchBagRecords: lunchBagRecords as any,
+      deleteMealRecord: (async () => {}) as any,
+      deleteRvMealRecord: (async () => {}) as any,
+      deleteExtraMealRecord: (async () => {}) as any,
+      addBulkMealRecord: (async () => ({ id: 'new-bulk' })) as any,
+      deleteBulkMealRecord: (async () => {}) as any,
+      updateBulkMealRecord: (async () => {}) as any,
+      updateMealRecord: (async () => {}) as any,
+      checkAndAddAutomaticMeals: (async () => {}) as any,
+    });
+
+    useGuestsStore.setState({
+      guests: guests as any,
+    });
+  }, [mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, guests]);
+
+  return <MealsSection />;
+}
+
+// ---------------------------------------------------------------------------
+// DonationsSection wrapper
+// ---------------------------------------------------------------------------
+
+interface DonationsSectionStoryProps {
+  /** General donation records */
+  donationRecords?: Array<{
+    id: string;
+    type: string;
+    itemName: string;
+    trays: number;
+    weightLbs: number;
+    density?: string;
+    servings: number;
+    temperature?: string;
+    donor: string;
+    date: string;
+    dateKey?: string;
+    createdAt?: string;
+    donatedAt?: string;
+  }>;
+  /** La Plaza donation records */
+  laPlazaRecords?: Array<{
+    id: string;
+    category: string;
+    weightLbs: number;
+    notes?: string;
+    receivedAt?: string;
+    dateKey?: string;
+    createdAt?: string;
+  }>;
+}
+
+export function DonationsSectionStory({
+  donationRecords = [],
+  laPlazaRecords = [],
+}: DonationsSectionStoryProps) {
+  useEffect(() => {
+    useDonationsStore.setState({
+      donationRecords: donationRecords as any,
+      laPlazaRecords: laPlazaRecords as any,
+      addDonation: (async (d: any) => {
+        const newRecord = {
+          id: 'new-donation-' + Date.now(),
+          type: d.donation_type,
+          itemName: d.item_name,
+          trays: d.trays || 0,
+          weightLbs: d.weight_lbs || 0,
+          servings: d.servings || 0,
+          donor: d.donor || '',
+          date: d.donated_at || new Date().toISOString(),
+          dateKey: d.date_key,
+          donatedAt: d.donated_at,
+        };
+        useDonationsStore.setState((state: any) => ({
+          donationRecords: [...state.donationRecords, newRecord],
+        }));
+        return newRecord;
+      }) as any,
+      updateDonation: (async () => ({})) as any,
+      deleteDonation: (async (id: string) => {
+        useDonationsStore.setState((state: any) => ({
+          donationRecords: state.donationRecords.filter((r: any) => r.id !== id),
+        }));
+      }) as any,
+      addLaPlazaDonation: (async (d: any) => {
+        const newRecord = {
+          id: 'new-laplaza-' + Date.now(),
+          category: d.category,
+          weightLbs: d.weight_lbs || 0,
+          notes: d.notes || '',
+          dateKey: d.date_key,
+        };
+        useDonationsStore.setState((state: any) => ({
+          laPlazaRecords: [...state.laPlazaRecords, newRecord],
+        }));
+        return newRecord;
+      }) as any,
+      updateLaPlazaDonation: (async () => ({})) as any,
+      deleteLaPlazaDonation: (async (id: string) => {
+        useDonationsStore.setState((state: any) => ({
+          laPlazaRecords: state.laPlazaRecords.filter((r: any) => r.id !== id),
+        }));
+      }) as any,
+    });
+  }, [donationRecords, laPlazaRecords]);
+
+  return <DonationsSection />;
+}
+
+// ---------------------------------------------------------------------------
+// BicycleSection wrapper
+// ---------------------------------------------------------------------------
+
+interface BicycleSectionStoryProps {
+  /** Bicycle repair records */
+  bicycleRecords?: Array<{
+    id: string;
+    guestId: string;
+    date: string;
+    type: string;
+    repairType: string;
+    repairTypes: string[];
+    completedRepairs: string[];
+    notes?: string;
+    status: string;
+    priority: number;
+    createdAt?: string;
+  }>;
+  /** Guests for name resolution */
+  guests?: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    preferredName?: string;
+    name?: string;
+    bicycleDescription?: string;
+  }>;
+}
+
+export function BicycleSectionStory({
+  bicycleRecords = [],
+  guests = [],
+}: BicycleSectionStoryProps) {
+  useEffect(() => {
+    useServicesStore.setState({
+      bicycleRecords: bicycleRecords as any,
+      updateBicycleRecord: (async () => {}) as any,
+      deleteBicycleRecord: (async () => {}) as any,
+    });
+
+    useGuestsStore.setState({
+      guests: guests as any,
+    });
+
+    // Stub waiver store so CompactWaiverIndicator doesn't crash
+    useWaiverStore.setState({
+      waiverVersion: 0,
+      guestNeedsWaiverReminder: (async () => false) as any,
+      hasActiveWaiver: (async () => false) as any,
+      dismissWaiver: (async () => true) as any,
+    });
+
+    // Stub reminders store so ReminderIndicator renders nothing
+    useRemindersStore.setState({
+      reminders: [],
+      getRemindersForService: (() => []) as any,
+      hasActiveReminder: (() => false) as any,
+    });
+  }, [bicycleRecords, guests]);
+
+  return <BicycleSection />;
 }
