@@ -1480,6 +1480,51 @@ end;
 $$ language plpgsql;
 
 -- ============================================
+-- 9b. DAILY NOTES (for operational context in analytics)
+-- Stores per-day-per-service notes explaining data anomalies
+-- ============================================
+
+create table if not exists public.daily_notes (
+  id uuid primary key default gen_random_uuid(),
+  note_date date not null,
+  service_type text not null check (service_type in ('meals', 'showers', 'laundry', 'general')),
+  note_text text not null,
+  created_by text,
+  updated_by text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  
+  constraint daily_notes_unique_per_day unique (note_date, service_type)
+);
+
+comment on table public.daily_notes is 'Stores daily operational notes for meals, showers, laundry, and general services to explain data anomalies in reports.';
+
+drop trigger if exists trg_daily_notes_updated_at on public.daily_notes;
+create trigger trg_daily_notes_updated_at
+before update on public.daily_notes
+for each row execute function public.touch_updated_at();
+
+-- Performance indexes
+create index if not exists daily_notes_date_idx on public.daily_notes (note_date desc);
+create index if not exists daily_notes_service_date_idx on public.daily_notes (service_type, note_date desc);
+
+-- RLS policies
+alter table public.daily_notes enable row level security;
+
+drop policy if exists "Authenticated users can view daily notes" on public.daily_notes;
+create policy "Authenticated users can view daily notes"
+  on public.daily_notes for select
+  to authenticated, anon
+  using (true);
+
+drop policy if exists "Authenticated users can manage daily notes" on public.daily_notes;
+create policy "Authenticated users can manage daily notes"
+  on public.daily_notes for all
+  to authenticated, anon
+  using (true)
+  with check (true);
+
+-- ============================================
 -- 10. ENABLE REALTIME FOR TABLES
 -- Required for Supabase Realtime subscriptions (cross-device sync)
 -- Note: If tables are already in the publication, these will error safely
@@ -1536,5 +1581,12 @@ begin
     where pubname = 'supabase_realtime' and tablename = 'guest_reminders'
   ) then
     alter publication supabase_realtime add table public.guest_reminders;
+  end if;
+  
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'daily_notes'
+  ) then
+    alter publication supabase_realtime add table public.daily_notes;
   end if;
 end $$;

@@ -100,6 +100,20 @@ vi.mock('@/stores/useRemindersStore', () => ({
     })),
 }));
 
+vi.mock('@/stores/useDailyNotesStore', () => ({
+    useDailyNotesStore: vi.fn(() => ({
+        notes: [],
+        isLoading: false,
+        loadFromSupabase: vi.fn(() => Promise.resolve()),
+        addOrUpdateNote: vi.fn(() => Promise.resolve()),
+        deleteNote: vi.fn(() => Promise.resolve()),
+        getNotesForDate: vi.fn(() => []),
+        getNoteForDateAndService: vi.fn(() => null),
+        getNotesForDateRange: vi.fn(() => []),
+        hasNoteForDate: vi.fn(() => false),
+    })),
+}));
+
 // Mock the selectors for check-in page
 vi.mock('@/stores/selectors/todayStatusSelectors', () => ({
     useTodayMealStatusMap: vi.fn(() => new Map()),
