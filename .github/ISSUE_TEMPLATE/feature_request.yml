@@ -69,6 +69,21 @@ body:
           - Bump `APP_VERSION` (use semantic versioning)
           - Add new entry to `CHANGELOG` array with feature details (keep it minimal and non-technical)
         - ✅ Share screenshot of new UI or feature
+        
+        ## Database Migration Requirements
+        
+        **If this feature requires database schema changes:**
+        
+        - ✅ Create migration file in `supabase/migrations/` folder (e.g., `supabase/migrations/20240209120000_add_daily_notes_table.sql`)
+        - ✅ Migration files are automatically applied via CI/CD when merged to main
+        - ✅ Follow Supabase naming convention: `YYYYMMDDHHMMSS_description.sql` (timestamp + description)
+        - ✅ Generate migrations using Supabase CLI locally: `supabase migration new description`
+        - ✅ Test migrations locally before pushing: `supabase db reset` then `supabase db push`
+        - ✅ Keep `database/schema.sql` updated as a reference (run `supabase db dump` to update)
+        
+        **Note:** The CI workflow detects changes to the `supabase/migrations/` folder and runs `supabase db push` automatically on merge to main.
+        
+        **Reference:** [Supabase Database Migrations Documentation](https://supabase.com/docs/guides/deployment/database-migrations)
 
   - type: textarea
     id: additional-notes
