@@ -25,7 +25,13 @@ import {
     Calendar,
     ArrowUp,
     ArrowDown,
-    StickyNote
+    StickyNote,
+    Filter,
+    X,
+    Check,
+    MapPin,
+    Home,
+    UserCheck
 } from 'lucide-react';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
@@ -34,6 +40,11 @@ import { useDonationsStore } from '@/stores/useDonationsStore';
 import { useDailyNotesStore, DailyNote } from '@/stores/useDailyNotesStore';
 import { useModalStore } from '@/stores/useModalStore';
 import { cn } from '@/lib/utils/cn';
+import {
+    HOUSING_STATUSES,
+    AGE_GROUPS,
+    GENDERS,
+} from '@/lib/constants/constants';
 
 // Time range presets
 const TIME_PRESETS = [
@@ -63,8 +74,27 @@ const VIEWS = [
     { id: 'demographics', label: 'Demographics', icon: Users },
 ];
 
+// Meal type options for demographics filtering
+const DEMO_MEAL_TYPE_OPTIONS = [
+    { key: 'guest', label: 'Guest Meals', color: '#3B82F6' },
+    { key: 'extras', label: 'Extra Meals', color: '#F97316' },
+    { key: 'rv', label: 'RV Meals', color: '#A855F7' },
+    { key: 'dayWorker', label: 'Day Worker', color: '#22C55E' },
+    { key: 'shelter', label: 'Shelter', color: '#EC4899' },
+    { key: 'unitedEffort', label: 'United Effort', color: '#6366F1' },
+    { key: 'lunchBags', label: 'Lunch Bags', color: '#EAB308' },
+] as const;
+
+type DemoMealTypeKey = typeof DEMO_MEAL_TYPE_OPTIONS[number]['key'];
+
+const DEMO_MEAL_TYPE_DEFAULTS: Record<DemoMealTypeKey, boolean> = {
+    guest: true, extras: true, rv: true, dayWorker: true,
+    shelter: true, unitedEffort: true, lunchBags: true,
+};
+
 export function AnalyticsSection() {
-    const { mealRecords, rvMealRecords, extraMealRecords, holidayRecords, haircutRecords } = useMealsStore();
+    const { mealRecords, rvMealRecords, extraMealRecords, holidayRecords, haircutRecords,
+        dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords } = useMealsStore();
     const { showerRecords, laundryRecords, bicycleRecords } = useServicesStore();
     const { guests } = useGuestsStore();
     useDonationsStore();
@@ -76,6 +106,13 @@ export function AnalyticsSection() {
     const [selectedPreset, setSelectedPreset] = useState('thisMonth');
     const [selectedPrograms, setSelectedPrograms] = useState(['meals', 'showers', 'laundry', 'bicycles', 'haircuts', 'holidays']);
     const [showComparison, setShowComparison] = useState(true);
+
+    // Demographic filter state
+    const [filterLocation, setFilterLocation] = useState<string>('all');
+    const [filterAgeGroup, setFilterAgeGroup] = useState<string>('all');
+    const [filterGender, setFilterGender] = useState<string>('all');
+    const [filterHousing, setFilterHousing] = useState<string>('all');
+    const [demoMealTypeFilters, setDemoMealTypeFilters] = useState(DEMO_MEAL_TYPE_DEFAULTS);
 
     // Custom date range state
     const today = new Date();
@@ -243,15 +280,37 @@ export function AnalyticsSection() {
     // Demographics
     const demographics = useMemo(() => {
         const activeGuestIds = new Set<string>();
-        [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-            .filter(r => isInRange(r.date, dateRange.start, dateRange.end))
-            .forEach(r => r.guestId && activeGuestIds.add(r.guestId));
+
+        // Collect guest IDs based on selected meal type filters
+        const addMealGuestIds = (records: { date: string; guestId: string }[]) => {
+            records
+                .filter(r => isInRange(r.date, dateRange.start, dateRange.end))
+                .forEach(r => r.guestId && activeGuestIds.add(r.guestId));
+        };
+
+        if (demoMealTypeFilters.guest) addMealGuestIds(mealRecords);
+        if (demoMealTypeFilters.rv) addMealGuestIds(rvMealRecords);
+        if (demoMealTypeFilters.extras) addMealGuestIds(extraMealRecords);
+        if (demoMealTypeFilters.dayWorker) addMealGuestIds(dayWorkerMealRecords);
+        if (demoMealTypeFilters.shelter) addMealGuestIds(shelterMealRecords);
+        if (demoMealTypeFilters.unitedEffort) addMealGuestIds(unitedEffortMealRecords);
+        if (demoMealTypeFilters.lunchBags) addMealGuestIds(lunchBagRecords);
+
+        // Include service records (showers, laundry)
         showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
             .forEach(r => activeGuestIds.add(r.guestId));
         laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
             .forEach(r => activeGuestIds.add(r.guestId));
 
-        const activeGuests = guests.filter(g => activeGuestIds.has(g.id));
+        // Apply demographic filters to active guests
+        const activeGuests = guests.filter(g => {
+            if (!activeGuestIds.has(g.id)) return false;
+            if (filterLocation !== 'all' && (g.location || 'Unknown') !== filterLocation) return false;
+            if (filterAgeGroup !== 'all' && (g.age || 'Unknown') !== filterAgeGroup) return false;
+            if (filterGender !== 'all' && (g.gender || 'Unknown') !== filterGender) return false;
+            if (filterHousing !== 'all' && (g.housingStatus || 'Unknown') !== filterHousing) return false;
+            return true;
+        });
 
         const housingCounts: Record<string, number> = {};
         const ageCounts: Record<string, number> = {};
@@ -277,13 +336,48 @@ export function AnalyticsSection() {
             locationCounts,
             total: activeGuests.length
         };
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, guests, isInRange]);
+    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords,
+        unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, guests, isInRange,
+        demoMealTypeFilters, filterLocation, filterAgeGroup, filterGender, filterHousing]);
+
+    // Unique locations from all guests for the filter dropdown
+    const locationOptions = useMemo(() => {
+        const locs = new Set<string>();
+        guests.forEach(g => {
+            if (g.location) locs.add(g.location);
+        });
+        return Array.from(locs).sort();
+    }, [guests]);
 
     const toggleProgram = (id: string) => {
         setSelectedPrograms(prev =>
             prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
         );
     };
+
+    const toggleDemoMealType = useCallback((key: DemoMealTypeKey) => {
+        setDemoMealTypeFilters(prev => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+
+    const selectAllDemoMealTypes = useCallback(() => {
+        setDemoMealTypeFilters(DEMO_MEAL_TYPE_DEFAULTS);
+    }, []);
+
+    const clearDemoMealTypes = useCallback(() => {
+        setDemoMealTypeFilters(Object.fromEntries(
+            DEMO_MEAL_TYPE_OPTIONS.map(o => [o.key, false])
+        ) as Record<DemoMealTypeKey, boolean>);
+    }, []);
+
+    const clearDemographicFilters = useCallback(() => {
+        setFilterLocation('all');
+        setFilterAgeGroup('all');
+        setFilterGender('all');
+        setFilterHousing('all');
+    }, []);
+
+    const hasActiveDemoFilters = filterLocation !== 'all' || filterAgeGroup !== 'all' || filterGender !== 'all' || filterHousing !== 'all';
+    const hasActiveMealTypeFilters = Object.values(demoMealTypeFilters).some(v => !v);
 
     const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899'];
 
@@ -531,6 +625,183 @@ export function AnalyticsSection() {
     // Render Demographics
     const renderDemographics = () => (
         <div className="space-y-6">
+            {/* Meal Type Filters */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <Utensils size={16} className="text-gray-400" />
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Meal Types</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={selectAllDemoMealTypes} className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                            <Check size={12} /> All
+                        </button>
+                        <button onClick={clearDemoMealTypes} className="text-xs text-gray-400 hover:underline flex items-center gap-1 font-medium">
+                            <X size={12} /> Clear
+                        </button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {DEMO_MEAL_TYPE_OPTIONS.map(type => {
+                        const isSelected = demoMealTypeFilters[type.key];
+                        return (
+                            <button
+                                key={type.key}
+                                onClick={() => toggleDemoMealType(type.key)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
+                                    isSelected
+                                        ? "text-white border-transparent"
+                                        : "bg-white text-gray-400 border-gray-200"
+                                )}
+                                style={isSelected ? { backgroundColor: type.color } : {}}
+                            >
+                                {type.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Demographic Filters */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Filter size={16} className="text-gray-400" />
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Demographic Filters</p>
+                    </div>
+                    {hasActiveDemoFilters && (
+                        <button
+                            onClick={clearDemographicFilters}
+                            className="text-xs text-red-500 hover:underline flex items-center gap-1 font-medium"
+                        >
+                            <X size={12} /> Clear Filters
+                        </button>
+                    )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Location Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <MapPin size={12} /> Location
+                        </label>
+                        <select
+                            value={filterLocation}
+                            onChange={e => setFilterLocation(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterLocation !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Locations</option>
+                            {locationOptions.map(loc => (
+                                <option key={loc} value={loc}>{loc}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+
+                    {/* Age Group Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <Users size={12} /> Age Group
+                        </label>
+                        <select
+                            value={filterAgeGroup}
+                            onChange={e => setFilterAgeGroup(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterAgeGroup !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Age Groups</option>
+                            {AGE_GROUPS.map(ag => (
+                                <option key={ag} value={ag}>{ag}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+
+                    {/* Gender Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <UserCheck size={12} /> Gender
+                        </label>
+                        <select
+                            value={filterGender}
+                            onChange={e => setFilterGender(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterGender !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Genders</option>
+                            {GENDERS.map(g => (
+                                <option key={g} value={g}>{g}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Housing Status Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <Home size={12} /> Housing Status
+                        </label>
+                        <select
+                            value={filterHousing}
+                            onChange={e => setFilterHousing(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterHousing !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Statuses</option>
+                            {HOUSING_STATUSES.map(hs => (
+                                <option key={hs} value={hs}>{hs}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+                </div>
+                {(hasActiveDemoFilters || hasActiveMealTypeFilters) && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {filterLocation !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <MapPin size={10} /> {filterLocation}
+                                <button onClick={() => setFilterLocation('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterAgeGroup !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <Users size={10} /> {filterAgeGroup}
+                                <button onClick={() => setFilterAgeGroup('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterGender !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <UserCheck size={10} /> {filterGender}
+                                <button onClick={() => setFilterGender('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterHousing !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <Home size={10} /> {filterHousing}
+                                <button onClick={() => setFilterHousing('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Demographics Results */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                     <Users size={20} className="text-indigo-600" />
@@ -544,7 +815,15 @@ export function AnalyticsSection() {
                     <div className="text-center py-12 text-gray-500">
                         <Users size={48} className="mx-auto mb-4 text-gray-300" />
                         <p className="font-medium">No guests found for the selected filters.</p>
-                        <p className="text-sm mt-1">Try expanding the date range.</p>
+                        <p className="text-sm mt-1">Try expanding the date range or adjusting filters.</p>
+                        {hasActiveDemoFilters && (
+                            <button
+                                onClick={clearDemographicFilters}
+                                className="mt-4 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                            >
+                                Clear Demographic Filters
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -572,6 +851,9 @@ export function AnalyticsSection() {
                                                 </div>
                                             </div>
                                         ))}
+                                        {entries.length > 5 && (
+                                            <p className="text-xs text-gray-400 pt-1">+{entries.length - 5} more</p>
+                                        )}
                                     </div>
                                 </div>
                             );
