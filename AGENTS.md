@@ -28,7 +28,7 @@
 | Animation | framer-motion                         |
 | Charts    | recharts, chart.js                    |
 | Testing   | Vitest + React Testing Library        |
-| PWA       | @ducanh2912/next-pwa                  |
+| PWA       | Custom service worker (public/sw.js)  |
 
 ## Directory Structure
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 
 const QUERY = '(prefers-reduced-motion: reduce)';
 
@@ -10,16 +10,15 @@ const QUERY = '(prefers-reduced-motion: reduce)';
  * Updates reactively if the preference changes while the app is open.
  */
 export function useReducedMotion(): boolean {
-  const [prefersReduced, setPrefersReduced] = useState(false);
-
-  useEffect(() => {
+  const subscribe = (callback: () => void) => {
     const mql = window.matchMedia(QUERY);
-    setPrefersReduced(mql.matches);
-
-    const handler = (e: MediaQueryListEvent) => setPrefersReduced(e.matches);
+    const handler = () => callback();
     mql.addEventListener('change', handler);
     return () => mql.removeEventListener('change', handler);
-  }, []);
+  };
 
-  return prefersReduced;
+  const getSnapshot = () => window.matchMedia(QUERY).matches;
+  const getServerSnapshot = () => false;
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
