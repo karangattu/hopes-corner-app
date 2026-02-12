@@ -138,12 +138,12 @@ export function MealsSection() {
                 type: 'guest',
                 isProxyPickup: Boolean(r?.pickedUpByGuestId && r.pickedUpByGuestId !== r.guestId),
             })),
-            ...rvMealRecords.map(r => ({ ...r, type: 'rv' })),
-            ...extraMealRecords.map(r => ({ ...r, type: 'extra' })),
-            ...dayWorkerMealRecords.map(r => ({ ...r, type: 'day_worker' })),
-            ...shelterMealRecords.map(r => ({ ...r, type: 'shelter' })),
-            ...unitedEffortMealRecords.map(r => ({ ...r, type: 'united_effort' })),
-            ...lunchBagRecords.map(r => ({ ...r, type: 'lunch_bag' })),
+            ...rvMealRecords.map(r => ({ ...r, type: 'rv', isProxyPickup: false })),
+            ...extraMealRecords.map(r => ({ ...r, type: 'extra', isProxyPickup: false })),
+            ...dayWorkerMealRecords.map(r => ({ ...r, type: 'day_worker', isProxyPickup: false })),
+            ...shelterMealRecords.map(r => ({ ...r, type: 'shelter', isProxyPickup: false })),
+            ...unitedEffortMealRecords.map(r => ({ ...r, type: 'united_effort', isProxyPickup: false })),
+            ...lunchBagRecords.map(r => ({ ...r, type: 'lunch_bag', isProxyPickup: false })),
         ];
         return allRecords
             .filter((r) => (r?.dateKey || pacificDateStringFrom(r.date)) === selectedDate)
