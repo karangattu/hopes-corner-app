@@ -3,9 +3,10 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom';
 
 // Mock next-auth session
+let mockRole = 'admin';
 vi.mock('next-auth/react', () => ({
     useSession: () => ({
-        data: { user: { role: 'admin' } },
+        data: { user: { role: mockRole } },
         status: 'authenticated',
     }),
 }));
@@ -35,9 +36,12 @@ const mockLaundryRecords = [
     { id: '5', guestId: 'g5', date: '2024-01-14', status: 'picked_up', laundryType: 'onsite', bagNumber: '104' },
 ];
 
+const mockAddLaundryRecord = vi.fn().mockResolvedValue({ id: 'new-laundry' });
+
 vi.mock('@/stores/useServicesStore', () => ({
     useServicesStore: () => ({
         laundryRecords: mockLaundryRecords,
+        addLaundryRecord: mockAddLaundryRecord,
         updateLaundryStatus: vi.fn(),
         updateLaundryBagNumber: vi.fn(),
         cancelMultipleLaundry: vi.fn(),
@@ -101,7 +105,36 @@ import { LaundrySection } from '../LaundrySection';
 
 describe('LaundrySection Time Travel', () => {
     beforeEach(() => {
+        mockRole = 'admin';
         vi.clearAllMocks();
+    });
+
+    it('allows staff to use historical add actions', () => {
+        mockRole = 'staff';
+        render(<LaundrySection />);
+        expect(screen.getByRole('button', { name: 'Add Completed' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add Laundry' })).toBeInTheDocument();
+    });
+
+    it('adds a completed laundry record for a historical date', async () => {
+        render(<LaundrySection />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('go-to-yesterday'));
+        });
+
+        fireEvent.change(screen.getByDisplayValue('Select guest'), {
+            target: { value: 'g1' },
+        });
+        fireEvent.change(screen.getByDisplayValue('On-site'), {
+            target: { value: 'offsite' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Completed' }));
+
+        await waitFor(() => {
+            expect(mockAddLaundryRecord).toHaveBeenCalledWith('g1', 'offsite', undefined, '', '2024-01-14', 'returned');
+        });
     });
 
     describe('Date Picker Visibility', () => {
@@ -181,7 +214,7 @@ describe('LaundrySection Time Travel', () => {
             });
         });
 
-        it('should show read-only instruction when viewing past date', async () => {
+        it('should show historical status restriction message when viewing past date', async () => {
             render(<LaundrySection />);
 
             // Click to go to yesterday
@@ -191,7 +224,7 @@ describe('LaundrySection Time Travel', () => {
 
             // Should show read-only message
             await waitFor(() => {
-                expect(screen.getByText(/Historical view - read only/)).toBeInTheDocument();
+                expect(screen.getByText(/Historical view - status updates disabled/)).toBeInTheDocument();
             });
         });
 
