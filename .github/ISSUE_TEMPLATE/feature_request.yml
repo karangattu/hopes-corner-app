@@ -85,6 +85,20 @@ body:
         
         **Reference:** [Supabase Database Migrations Documentation](https://supabase.com/docs/guides/deployment/database-migrations)
 
+        ## Feature Removal / Cleanup Requirements
+
+        **If this request removes, replaces, or deprecates an existing feature:**
+
+        - ✅ Remove UI entry points (pages, tabs, nav links, buttons, modals, routes)
+        - ✅ Remove or refactor related store/actions/hooks/selectors
+        - ✅ Remove obsolete backend/API logic and related permissions/policies
+        - ✅ Remove or migrate database artifacts (tables, columns, enums, triggers, views, RLS policies) via migration files
+        - ✅ Remove dead utilities/types/constants and unused dependencies/imports
+        - ✅ Remove or update tests (unit, integration, component/e2e) for deleted behavior
+        - ✅ Verify no orphaned references remain (`grep`/TypeScript/lint should be clean)
+        - ✅ Update docs, runbooks, and user-facing guidance to reflect removal
+        - ✅ Include migration/backfill/rollback notes if data is being deleted or transformed
+
   - type: textarea
     id: additional-notes
     attributes:
