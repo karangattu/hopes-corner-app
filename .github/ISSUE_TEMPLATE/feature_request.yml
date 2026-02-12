@@ -63,6 +63,7 @@ body:
         - ✅ Add/update tests for all new logic and UI changes
         - ✅ Run lint: `npm run lint`
         - ✅ Run full tests: `npm test -- --run`
+        - ✅ Run production build: `npm run build`
         - ✅ Verify no regressions
         - ✅ Update documentation if applicable
         - ✅ **Update version & changelog** in `src/lib/utils/appVersion.ts`:
