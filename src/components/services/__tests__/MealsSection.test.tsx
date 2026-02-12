@@ -15,7 +15,7 @@ vi.mock('@/stores/useMealsStore', () => ({
     useMealsStore: vi.fn((selector) => {
         const state = {
             mealRecords: [
-                { id: 'm1', guestId: 'g1', count: 2, date: '2026-01-08', type: 'guest', proxyId: null },
+                { id: 'm1', guestId: 'g1', pickedUpByGuestId: 'g2', count: 2, date: '2026-01-08', type: 'guest' },
             ],
             extraMealRecords: [],
             rvMealRecords: [
@@ -95,6 +95,12 @@ describe('MealsSection Component', () => {
         it('shows guest names in records', () => {
             render(<MealsSection />);
             expect(screen.getByText('Johnny')).toBeDefined();
+        });
+
+        it('highlights proxy pickups with handshake type', () => {
+            render(<MealsSection />);
+            expect(screen.getByText('🤝 Proxy Pickup')).toBeDefined();
+            expect(screen.getByText(/Picked up by/i)).toBeDefined();
         });
     });
 });

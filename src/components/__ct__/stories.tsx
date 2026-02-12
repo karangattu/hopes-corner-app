@@ -360,6 +360,7 @@ interface MealsSectionStoryProps {
   mealRecords?: Array<{
     id: string;
     guestId: string;
+    pickedUpByGuestId?: string | null;
     count: number;
     date: string;
     createdAt?: string;

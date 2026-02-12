@@ -45,10 +45,25 @@ test.describe('MealsSection', () => {
     const component = await mount(<MealsSectionStory />);
     await expect(component.getByText('Total Meals')).toBeVisible();
     await expect(component.getByText('Guest Meals')).toBeVisible();
+    await expect(component.getByText('Proxy Pickups')).toBeVisible();
     await expect(component.getByText('RV Meals')).toBeVisible();
     await expect(component.getByText('Day Worker')).toBeVisible();
     await expect(component.getByText('Lunch Bags')).toBeVisible();
     await expect(component.getByText('Partner Orgs')).toBeVisible();
+  });
+
+  test('highlights proxy pickups with handshake badge and picked-up-by text', async ({ mount }) => {
+    const component = await mount(
+      <MealsSectionStory
+        mealRecords={[
+          { id: 'm1', guestId: 'g1', pickedUpByGuestId: 'g2', count: 1, date: todayDate, createdAt: todayDate },
+        ]}
+        guests={sampleGuests}
+      />
+    );
+
+    await expect(component.getByText('🤝 Proxy Pickup', { exact: true })).toBeVisible();
+    await expect(component.getByText('Picked up by Jane', { exact: false })).toBeVisible();
   });
 
   test('computes stats from seeded meal records', async ({ mount }) => {

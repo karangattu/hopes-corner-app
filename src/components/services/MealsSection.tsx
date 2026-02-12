@@ -110,6 +110,13 @@ export function MealsSection() {
 
         const sumCount = (arr: any[]) => arr.reduce((sum, r) => sum + (r.count || 0), 0);
 
+        const proxyPickupCount = guestMeals.reduce((sum, r) => {
+            if (r?.pickedUpByGuestId && r.pickedUpByGuestId !== r.guestId) {
+                return sum + (r.count || 0);
+            }
+            return sum;
+        }, 0);
+
         return {
             total: sumCount([...guestMeals, ...rvMeals, ...extraMeals, ...dayWorkerMeals, ...shelterMeals, ...ueMeals, ...lunchBags]),
             guestCount: sumCount(guestMeals),
@@ -119,13 +126,18 @@ export function MealsSection() {
             ueCount: sumCount(ueMeals),
             lunchBagCount: sumCount(lunchBags),
             extraCount: sumCount(extraMeals),
+            proxyPickups: proxyPickupCount,
             uniqueGuests: new Set(guestMeals.map(r => r.guestId)).size
         };
     }, [selectedDate, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords]);
 
     const history = useMemo(() => {
         const allRecords = [
-            ...mealRecords.map(r => ({ ...r, type: 'guest' })),
+            ...mealRecords.map(r => ({
+                ...r,
+                type: 'guest',
+                isProxyPickup: Boolean(r?.pickedUpByGuestId && r.pickedUpByGuestId !== r.guestId),
+            })),
             ...rvMealRecords.map(r => ({ ...r, type: 'rv' })),
             ...extraMealRecords.map(r => ({ ...r, type: 'extra' })),
             ...dayWorkerMealRecords.map(r => ({ ...r, type: 'day_worker' })),
@@ -221,6 +233,16 @@ export function MealsSection() {
         }
         const guest = guestMap.get(record.guestId);
         return guest ? (guest.preferredName || guest.firstName + ' ' + (guest.lastName || '')) : 'Unknown Guest';
+    };
+
+    const getPickedUpByName = (record: any) => {
+        const pickupId = record?.pickedUpByGuestId;
+        if (!pickupId) return null;
+        const pickupGuest = guestMap.get(pickupId);
+        if (!pickupGuest) return 'Buddy';
+        const preferred = pickupGuest.preferredName || pickupGuest.firstName;
+        if (preferred) return preferred;
+        return pickupGuest.name || 'Buddy';
     };
 
     // ... getRecordIcon, getRecordColor ...
@@ -400,9 +422,10 @@ export function MealsSection() {
             </AnimatePresence>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                 <StatCard label="Total Meals" value={dayMetrics.total} color="emerald" />
                 <StatCard label="Guest Meals" value={dayMetrics.guestCount} color="blue" />
+                <StatCard label="Proxy Pickups" value={dayMetrics.proxyPickups} color="indigo" />
                 <StatCard label="RV Meals" value={dayMetrics.rvCount} color="purple" />
                 <StatCard label="Day Worker" value={dayMetrics.dayWorkerCount} color="sky" />
                 <StatCard label="Lunch Bags" value={dayMetrics.lunchBagCount} color="amber" />
@@ -458,6 +481,13 @@ export function MealsSection() {
                                                     </p>
                                                 )}
                                             </div>
+
+                                            {record?.isProxyPickup && (
+                                                <p className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1">
+                                                    <span aria-hidden>🤝</span>
+                                                    <span>Picked up by {getPickedUpByName(record)}</span>
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -470,9 +500,22 @@ export function MealsSection() {
                                             record.type === 'lunch_bag' && "bg-emerald-100 text-emerald-700",
                                             record.type === 'united_effort' && "bg-rose-100 text-rose-700",
                                             record.type === 'extra' && "bg-orange-100 text-orange-700",
-                                            record.type === 'guest' && "bg-gray-100 text-gray-700",
+                                            record.type === 'guest' && !record?.isProxyPickup && "bg-gray-100 text-gray-700",
+                                            record.type === 'guest' && record?.isProxyPickup && "bg-emerald-100 text-emerald-700",
                                         )}>
-                                            {record.type === 'day_worker' ? 'Day Worker' : record.type === 'lunch_bag' ? 'Lunch Bag' : record.type === 'united_effort' ? 'United Effort' : record.type === 'extra' ? 'Extra' : record.type === 'guest' ? 'Guest' : record.type}
+                                            {record.type === 'guest' && record?.isProxyPickup
+                                                ? '🤝 Proxy Pickup'
+                                                : record.type === 'day_worker'
+                                                    ? 'Day Worker'
+                                                    : record.type === 'lunch_bag'
+                                                        ? 'Lunch Bag'
+                                                        : record.type === 'united_effort'
+                                                            ? 'United Effort'
+                                                            : record.type === 'extra'
+                                                                ? 'Extra'
+                                                                : record.type === 'guest'
+                                                                    ? 'Guest'
+                                                                    : record.type}
                                         </span>
                                         {!isEditing && (
                                             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
