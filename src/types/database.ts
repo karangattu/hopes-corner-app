@@ -7,7 +7,6 @@ export type HousingStatusEnum = 'Unhoused' | 'Housed' | 'Temp. shelter' | 'RV or
 export type LaundryStatusEnum = 'waiting' | 'washer' | 'dryer' | 'done' | 'picked_up' | 'pending' | 'transported' | 'returned' | 'offsite_picked_up';
 export type BicycleRepairStatusEnum = 'pending' | 'in_progress' | 'done';
 export type DonationTypeEnum = 'Protein' | 'Carbs' | 'Vegetables' | 'Fruit' | 'Veggie Protein' | 'Deli Foods' | 'Pastries' | 'School Lunch';
-export type LaPlazaCategoryEnum = 'Bakery' | 'Beverages' | 'Dairy' | 'Meat' | 'Mix' | 'Nonfood' | 'Prepared/Perishable' | 'Produce';
 export type MealTypeEnum = 'guest' | 'extra' | 'rv' | 'shelter' | 'united_effort' | 'day_worker' | 'lunch_bag';
 export type ShowerStatusEnum = 'booked' | 'waitlisted' | 'done' | 'cancelled' | 'no_show';
 export type DailyNoteServiceType = 'meals' | 'showers' | 'laundry' | 'general';
@@ -122,17 +121,6 @@ export interface Donation {
     temperature?: string;
     donor: string;
     donated_at: string;
-    date_key?: string;
-    created_at: string;
-    updated_at: string;
-}
-
-export interface LaPlazaDonation {
-    id: string;
-    category: LaPlazaCategoryEnum;
-    weight_lbs: number;
-    notes?: string;
-    received_at: string;
     date_key?: string;
     created_at: string;
     updated_at: string;

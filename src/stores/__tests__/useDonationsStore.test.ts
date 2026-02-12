@@ -32,21 +32,10 @@ const createMockDonation = (overrides = {}) => ({
     ...overrides,
 });
 
-const createMockLaPlazaDonation = (overrides = {}) => ({
-    id: 'laplaza-1',
-    itemType: 'clothing',
-    quantity: 10,
-    description: 'Winter coats',
-    date: '2025-01-06',
-    createdAt: '2025-01-06T08:00:00Z',
-    ...overrides,
-});
-
 describe('useDonationsStore', () => {
     beforeEach(() => {
         useDonationsStore.setState({
             donationRecords: [],
-            laPlazaRecords: [],
         });
     });
 
@@ -54,11 +43,6 @@ describe('useDonationsStore', () => {
         it('starts with empty donation records', () => {
             const { donationRecords } = useDonationsStore.getState();
             expect(donationRecords).toEqual([]);
-        });
-
-        it('starts with empty La Plaza records', () => {
-            const { laPlazaRecords } = useDonationsStore.getState();
-            expect(laPlazaRecords).toEqual([]);
         });
     });
 
@@ -236,99 +220,6 @@ describe('useDonationsStore', () => {
         });
     });
 
-    describe('La Plaza records', () => {
-        describe('state management', () => {
-            it('can add a La Plaza record', () => {
-                const record = createMockLaPlazaDonation();
-                useDonationsStore.setState({ laPlazaRecords: [record] });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                expect(laPlazaRecords.length).toBe(1);
-            });
-
-            it('can add multiple La Plaza records', () => {
-                const records = [
-                    createMockLaPlazaDonation({ id: 'lp1' }),
-                    createMockLaPlazaDonation({ id: 'lp2' }),
-                ];
-
-                useDonationsStore.setState({ laPlazaRecords: records });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                expect(laPlazaRecords.length).toBe(2);
-            });
-
-            it('can remove a La Plaza record', () => {
-                useDonationsStore.setState({
-                    laPlazaRecords: [
-                        createMockLaPlazaDonation({ id: 'lp1' }),
-                        createMockLaPlazaDonation({ id: 'lp2' }),
-                    ],
-                });
-
-                useDonationsStore.setState((state) => ({
-                    laPlazaRecords: state.laPlazaRecords.filter((r) => r.id !== 'lp1'),
-                }));
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                expect(laPlazaRecords.length).toBe(1);
-            });
-        });
-
-        describe('filtering', () => {
-            it('filters by item type', () => {
-                const records = [
-                    createMockLaPlazaDonation({ id: 'lp1', itemType: 'clothing' }),
-                    createMockLaPlazaDonation({ id: 'lp2', itemType: 'food' }),
-                    createMockLaPlazaDonation({ id: 'lp3', itemType: 'clothing' }),
-                ];
-
-                useDonationsStore.setState({ laPlazaRecords: records });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                const clothingItems = laPlazaRecords.filter((r) => r.itemType === 'clothing');
-                expect(clothingItems.length).toBe(2);
-            });
-
-            it('filters by date', () => {
-                const records = [
-                    createMockLaPlazaDonation({ id: 'lp1', date: '2025-01-06' }),
-                    createMockLaPlazaDonation({ id: 'lp2', date: '2025-01-05' }),
-                ];
-
-                useDonationsStore.setState({ laPlazaRecords: records });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                const todayItems = laPlazaRecords.filter((r) => r.date === '2025-01-06');
-                expect(todayItems.length).toBe(1);
-            });
-        });
-
-        describe('quantity tracking', () => {
-            it('tracks item quantities', () => {
-                const record = createMockLaPlazaDonation({ quantity: 25 });
-                useDonationsStore.setState({ laPlazaRecords: [record] });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                expect(laPlazaRecords[0].quantity).toBe(25);
-            });
-
-            it('calculates total items distributed', () => {
-                const records = [
-                    createMockLaPlazaDonation({ id: 'lp1', quantity: 10 }),
-                    createMockLaPlazaDonation({ id: 'lp2', quantity: 20 }),
-                    createMockLaPlazaDonation({ id: 'lp3', quantity: 15 }),
-                ];
-
-                useDonationsStore.setState({ laPlazaRecords: records });
-
-                const { laPlazaRecords } = useDonationsStore.getState();
-                const total = laPlazaRecords.reduce((sum, r) => sum + r.quantity, 0);
-                expect(total).toBe(45);
-            });
-        });
-    });
-
     describe('getRecentDonations', () => {
         it('returns recent donations', () => {
             const records = [
@@ -409,7 +300,7 @@ describe('useDonationsStore', () => {
     describe('async actions', () => {
         beforeEach(() => {
             vi.clearAllMocks();
-            useDonationsStore.setState({ donationRecords: [], laPlazaRecords: [] });
+            useDonationsStore.setState({ donationRecords: [] });
         });
 
         describe('addDonation', () => {
@@ -456,46 +347,6 @@ describe('useDonationsStore', () => {
             });
         });
 
-        describe('addLaPlazaDonation', () => {
-            it('adds a La Plaza donation successfully', async () => {
-                const { addLaPlazaDonation } = useDonationsStore.getState();
-                const result = await addLaPlazaDonation({
-                    category: 'produce',
-                    weight_lbs: 25,
-                    notes: 'Fresh vegetables',
-                });
-
-                expect(result).toBeDefined();
-                expect(useDonationsStore.getState().laPlazaRecords.length).toBe(1);
-            });
-        });
-
-        describe('updateLaPlazaDonation', () => {
-            it('updates a La Plaza donation successfully', async () => {
-                useDonationsStore.setState({
-                    laPlazaRecords: [{ id: 'lp1', category: 'produce', weightLbs: 25, notes: 'Old notes' }],
-                });
-
-                const { updateLaPlazaDonation } = useDonationsStore.getState();
-                const result = await updateLaPlazaDonation('lp1', { category: 'dairy', weight_lbs: 30, notes: 'Updated notes' });
-
-                expect(result).toBeDefined();
-            });
-        });
-
-        describe('deleteLaPlazaDonation', () => {
-            it('deletes a La Plaza donation successfully', async () => {
-                useDonationsStore.setState({
-                    laPlazaRecords: [{ id: 'lp1', category: 'produce', weightLbs: 25 }],
-                });
-
-                const { deleteLaPlazaDonation } = useDonationsStore.getState();
-                await deleteLaPlazaDonation('lp1');
-
-                expect(useDonationsStore.getState().laPlazaRecords.length).toBe(0);
-            });
-        });
-
         describe('loadFromSupabase', () => {
             it('loads donations from Supabase', async () => {
                 const { loadFromSupabase } = useDonationsStore.getState();
@@ -504,7 +355,6 @@ describe('useDonationsStore', () => {
                 // Should not throw and state should be set
                 const state = useDonationsStore.getState();
                 expect(Array.isArray(state.donationRecords)).toBe(true);
-                expect(Array.isArray(state.laPlazaRecords)).toBe(true);
             });
         });
 
