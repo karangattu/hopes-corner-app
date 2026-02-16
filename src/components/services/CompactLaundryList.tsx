@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useMemo, useState, useCallback, memo } from "react";
-import { WashingMachine, Clock, CheckCircle, Package, Wind, Truck, ChevronDown, ChevronUp, Eye } from "lucide-react";
+import { WashingMachine, Clock, CheckCircle, Package, Wind, Truck, ChevronDown, ChevronUp, Eye, ChevronRight, Loader2 } from "lucide-react";
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { todayPacificDateString, pacificDateStringFrom, formatPacificTimeString } from '@/lib/utils/date';
 import { CompactWaiverIndicator } from '@/components/ui/CompactWaiverIndicator';
 import { ReminderIndicator } from '@/components/ui/ReminderIndicator';
 import { cn } from '@/lib/utils/cn';
+import toast from 'react-hot-toast';
 
 // Status Constants
 const LAUNDRY_STATUS = {
@@ -26,6 +27,7 @@ const LAUNDRY_STATUS = {
 interface CompactLaundryListProps {
     viewDate?: string | null;
     onGuestClick?: (guestId: string, recordId: string) => void;
+    readOnly?: boolean;
 }
 
 interface LaundryBooking {
@@ -124,11 +126,103 @@ const LaundryStatusBadge = memo(({ status }: { status: string }) => {
 });
 LaundryStatusBadge.displayName = "LaundryStatusBadge";
 
+// Status flow definitions for quick-advance buttons
+const ONSITE_STATUS_FLOW: string[] = ['waiting', 'washer', 'dryer', 'done', 'picked_up'];
+const OFFSITE_STATUS_FLOW: string[] = ['pending', 'transported', 'returned', 'offsite_picked_up'];
+
+const ONSITE_STATUS_OPTIONS = [
+    { id: 'waiting', label: 'Waiting' },
+    { id: 'washer', label: 'Washer' },
+    { id: 'dryer', label: 'Dryer' },
+    { id: 'done', label: 'Done' },
+    { id: 'picked_up', label: 'Picked Up' },
+];
+
+const OFFSITE_STATUS_OPTIONS = [
+    { id: 'pending', label: 'Pending' },
+    { id: 'transported', label: 'Transported' },
+    { id: 'returned', label: 'Returned' },
+    { id: 'offsite_picked_up', label: 'Picked Up' },
+];
+
+function getNextStatus(currentStatus: string, isOffsite: boolean): string | null {
+    const flow = isOffsite ? OFFSITE_STATUS_FLOW : ONSITE_STATUS_FLOW;
+    const idx = flow.indexOf(currentStatus);
+    if (idx === -1 || idx >= flow.length - 1) return null;
+    return flow[idx + 1];
+}
+
+function getNextStatusLabel(nextStatus: string): string {
+    const labels: Record<string, string> = {
+        washer: 'Washer',
+        dryer: 'Dryer',
+        done: 'Done',
+        picked_up: 'Picked Up',
+        transported: 'Transported',
+        returned: 'Returned',
+        offsite_picked_up: 'Picked Up',
+    };
+    return labels[nextStatus] || nextStatus;
+}
+
+// Shared status change hook
+function useStatusChange(recordId: string, readOnly: boolean) {
+    const [isUpdating, setIsUpdating] = useState(false);
+    const { updateLaundryStatus, updateLaundryBagNumber } = useServicesStore();
+
+    const handleStatusChange = useCallback(async (e: React.MouseEvent | React.ChangeEvent<HTMLSelectElement>, newStatus: string, currentRecord?: LaundryBooking) => {
+        if ('stopPropagation' in e) e.stopPropagation();
+        if (readOnly || isUpdating) return;
+
+        // Check if bag number is needed (moving out of waiting/pending without one)
+        if (currentRecord && !currentRecord.bagNumber) {
+            const isOffsite = currentRecord.laundryType === 'offsite';
+            const currentStatus = currentRecord.status;
+            const needsBag = isOffsite
+                ? (currentStatus === 'pending' || currentStatus === 'waiting') && newStatus !== 'pending' && newStatus !== 'waiting'
+                : currentStatus === 'waiting' && newStatus !== 'waiting';
+
+            if (needsBag) {
+                const manualBag = window.prompt('A bag number is required before moving out of waiting. Enter one to continue.');
+                const trimmedBag = (manualBag || '').trim();
+                if (!trimmedBag) {
+                    toast.error('Please enter a bag number to continue');
+                    return;
+                }
+                try {
+                    await updateLaundryBagNumber(recordId, trimmedBag);
+                    toast.success('Bag number saved');
+                } catch {
+                    toast.error('Failed to save bag number');
+                    return;
+                }
+            }
+        }
+
+        setIsUpdating(true);
+        try {
+            await updateLaundryStatus(recordId, newStatus);
+            toast.success('Status updated');
+        } catch {
+            toast.error('Failed to update status');
+        } finally {
+            setIsUpdating(false);
+        }
+    }, [recordId, readOnly, isUpdating, updateLaundryStatus, updateLaundryBagNumber]);
+
+    return { isUpdating, handleStatusChange };
+}
+
 // Memoized active laundry row
-const ActiveLaundryRow = memo(({ booking, onGuestClick }: { booking: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void }) => {
+const ActiveLaundryRow = memo(({ booking, onGuestClick, readOnly = false }: { booking: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void; readOnly?: boolean }) => {
     const handleClick = useCallback(() => {
         onGuestClick?.(booking.guestId, booking.id);
     }, [onGuestClick, booking.guestId, booking.id]);
+
+    const { isUpdating, handleStatusChange } = useStatusChange(booking.id, readOnly);
+    const isOffsite = booking.laundryType === 'offsite';
+    const nextStatus = getNextStatus(booking.status, isOffsite);
+    const statusOptions = isOffsite ? OFFSITE_STATUS_OPTIONS : ONSITE_STATUS_OPTIONS;
 
     return (
         <div
@@ -154,7 +248,35 @@ const ActiveLaundryRow = memo(({ booking, onGuestClick }: { booking: LaundryBook
             <div className="flex items-center gap-2">
                 <ReminderIndicator guestId={booking.guestId} serviceType="laundry" compact />
                 <CompactWaiverIndicator guestId={booking.guestId} serviceType="laundry" />
-                <LaundryStatusBadge status={booking.status} />
+
+                {!readOnly && nextStatus && (
+                    <button
+                        disabled={isUpdating}
+                        onClick={(e) => handleStatusChange(e, nextStatus, booking)}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-500 text-white hover:bg-purple-600 transition-colors flex items-center gap-1 shadow-sm"
+                        aria-label={`Advance to ${getNextStatusLabel(nextStatus)}`}
+                    >
+                        {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
+                        {getNextStatusLabel(nextStatus)}
+                    </button>
+                )}
+
+                {!readOnly && (
+                    <select
+                        value={booking.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleStatusChange(e, e.target.value, booking)}
+                        disabled={isUpdating}
+                        className="text-[10px] font-medium border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
+                        aria-label="Change laundry status"
+                    >
+                        {statusOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                    </select>
+                )}
+
+                {readOnly && <LaundryStatusBadge status={booking.status} />}
             </div>
         </div>
     );
@@ -162,10 +284,13 @@ const ActiveLaundryRow = memo(({ booking, onGuestClick }: { booking: LaundryBook
 ActiveLaundryRow.displayName = "ActiveLaundryRow";
 
 // Memoized done laundry row
-const DoneLaundryRow = memo(({ booking, onGuestClick }: { booking: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void }) => {
+const DoneLaundryRow = memo(({ booking, onGuestClick, readOnly = false }: { booking: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void; readOnly?: boolean }) => {
     const handleClick = useCallback(() => {
         onGuestClick?.(booking.guestId, booking.id);
     }, [onGuestClick, booking.guestId, booking.id]);
+
+    const { isUpdating, handleStatusChange } = useStatusChange(booking.id, readOnly);
+    const statusOptions = ONSITE_STATUS_OPTIONS;
 
     return (
         <div
@@ -188,17 +313,36 @@ const DoneLaundryRow = memo(({ booking, onGuestClick }: { booking: LaundryBookin
                     )}
                 </div>
             </div>
-            <LaundryStatusBadge status={booking.status} />
+            <div className="flex items-center gap-2">
+                {!readOnly && (
+                    <select
+                        value={booking.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleStatusChange(e, e.target.value, booking)}
+                        disabled={isUpdating}
+                        className="text-[10px] font-medium border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
+                        aria-label="Change laundry status"
+                    >
+                        {statusOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                    </select>
+                )}
+                {readOnly && <LaundryStatusBadge status={booking.status} />}
+            </div>
         </div>
     );
 });
 DoneLaundryRow.displayName = "DoneLaundryRow";
 
 // Memoized offsite laundry row (active)
-const OffsiteActiveRow = memo(({ item, onGuestClick }: { item: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void }) => {
+const OffsiteActiveRow = memo(({ item, onGuestClick, readOnly = false }: { item: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void; readOnly?: boolean }) => {
     const handleClick = useCallback(() => {
         onGuestClick?.(item.guestId, item.id);
     }, [onGuestClick, item.guestId, item.id]);
+
+    const { isUpdating, handleStatusChange } = useStatusChange(item.id, readOnly);
+    const nextStatus = getNextStatus(item.status, true);
 
     return (
         <div
@@ -219,7 +363,35 @@ const OffsiteActiveRow = memo(({ item, onGuestClick }: { item: LaundryBooking; o
             <div className="flex items-center gap-2">
                 <ReminderIndicator guestId={item.guestId} serviceType="laundry" compact />
                 <CompactWaiverIndicator guestId={item.guestId} serviceType="laundry" />
-                <LaundryStatusBadge status={item.status} />
+
+                {!readOnly && nextStatus && (
+                    <button
+                        disabled={isUpdating}
+                        onClick={(e) => handleStatusChange(e, nextStatus, item)}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center gap-1 shadow-sm"
+                        aria-label={`Advance to ${getNextStatusLabel(nextStatus)}`}
+                    >
+                        {isUpdating ? <Loader2 size={10} className="animate-spin" /> : <ChevronRight size={10} />}
+                        {getNextStatusLabel(nextStatus)}
+                    </button>
+                )}
+
+                {!readOnly && (
+                    <select
+                        value={item.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleStatusChange(e, e.target.value, item)}
+                        disabled={isUpdating}
+                        className="text-[10px] font-medium border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                        aria-label="Change laundry status"
+                    >
+                        {OFFSITE_STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                    </select>
+                )}
+
+                {readOnly && <LaundryStatusBadge status={item.status} />}
             </div>
         </div>
     );
@@ -227,10 +399,12 @@ const OffsiteActiveRow = memo(({ item, onGuestClick }: { item: LaundryBooking; o
 OffsiteActiveRow.displayName = "OffsiteActiveRow";
 
 // Memoized offsite laundry row (done)
-const OffsiteDoneRow = memo(({ item, onGuestClick }: { item: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void }) => {
+const OffsiteDoneRow = memo(({ item, onGuestClick, readOnly = false }: { item: LaundryBooking; onGuestClick?: (guestId: string, recordId: string) => void; readOnly?: boolean }) => {
     const handleClick = useCallback(() => {
         onGuestClick?.(item.guestId, item.id);
     }, [onGuestClick, item.guestId, item.id]);
+
+    const { isUpdating, handleStatusChange } = useStatusChange(item.id, readOnly);
 
     return (
         <div
@@ -248,7 +422,23 @@ const OffsiteDoneRow = memo(({ item, onGuestClick }: { item: LaundryBooking; onG
                     <span className="text-xs text-emerald-600">Bag #{item.bagNumber}</span>
                 )}
             </div>
-            <LaundryStatusBadge status={item.status} />
+            <div className="flex items-center gap-2">
+                {!readOnly && (
+                    <select
+                        value={item.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleStatusChange(e, e.target.value, item)}
+                        disabled={isUpdating}
+                        className="text-[10px] font-medium border border-gray-200 rounded-lg px-1.5 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                        aria-label="Change laundry status"
+                    >
+                        {OFFSITE_STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                    </select>
+                )}
+                {readOnly && <LaundryStatusBadge status={item.status} />}
+            </div>
         </div>
     );
 });
@@ -259,7 +449,7 @@ OffsiteDoneRow.displayName = "OffsiteDoneRow";
  * Shows guest name, time slot, and status in a compact format for quick reference
  * Can view today's laundry or travel back in time to see laundry from past dates
  */
-const CompactLaundryList = memo(({ viewDate = null, onGuestClick }: CompactLaundryListProps) => {
+const CompactLaundryList = memo(({ viewDate = null, onGuestClick, readOnly = false }: CompactLaundryListProps) => {
     const { laundryRecords } = useServicesStore();
     const { guests } = useGuestsStore();
 
@@ -443,6 +633,7 @@ const CompactLaundryList = memo(({ viewDate = null, onGuestClick }: CompactLaund
                             key={booking.id}
                             booking={booking}
                             onGuestClick={onGuestClick}
+                            readOnly={readOnly}
                         />
                     ))}
                 </div>
@@ -470,6 +661,7 @@ const CompactLaundryList = memo(({ viewDate = null, onGuestClick }: CompactLaund
                                     key={booking.id}
                                     booking={booking}
                                     onGuestClick={onGuestClick}
+                                    readOnly={readOnly}
                                 />
                             ))}
                         </div>
@@ -499,6 +691,7 @@ const CompactLaundryList = memo(({ viewDate = null, onGuestClick }: CompactLaund
                                     key={item.id}
                                     item={item}
                                     onGuestClick={onGuestClick}
+                                    readOnly={readOnly}
                                 />
                             ))}
                             {laundryData.offsiteDone.map((item) => (
@@ -506,6 +699,7 @@ const CompactLaundryList = memo(({ viewDate = null, onGuestClick }: CompactLaund
                                     key={item.id}
                                     item={item}
                                     onGuestClick={onGuestClick}
+                                    readOnly={readOnly}
                                 />
                             ))}
                         </div>

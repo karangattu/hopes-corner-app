@@ -112,6 +112,8 @@ describe('LaundrySection Time Travel', () => {
     it('allows staff to use historical add actions', () => {
         mockRole = 'staff';
         render(<LaundrySection />);
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Laundry Record/ }));
         expect(screen.getByRole('button', { name: 'Add Completed' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Add Laundry' })).toBeInTheDocument();
     });
@@ -122,6 +124,9 @@ describe('LaundrySection Time Travel', () => {
         await act(async () => {
             fireEvent.click(screen.getByTestId('go-to-yesterday'));
         });
+
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Laundry Record/ }));
 
         fireEvent.change(screen.getByDisplayValue('Select guest'), {
             target: { value: 'g1' },

@@ -3,7 +3,7 @@
  * Centralizes version information and changelog data
  */
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 
 export interface ChangelogItem {
     type: 'feature' | 'fix' | 'performance' | 'improvement';
@@ -19,6 +19,27 @@ export interface ChangelogEntry {
 
 // Changelog entries - add new entries at the top
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.2.0',
+        date: 'February 16, 2026',
+        highlights: [
+            {
+                type: 'feature',
+                title: 'Inline Status Changes in List View',
+                description: 'Shower and laundry list views now show quick-action buttons to advance, reopen, or cancel statuses directly — no need to open a detail modal.',
+            },
+            {
+                type: 'feature',
+                title: 'Laundry Status Dropdown',
+                description: 'A compact dropdown on each laundry row lets you jump to any status in the workflow, with automatic bag-number prompts when required.',
+            },
+            {
+                type: 'improvement',
+                title: 'Collapsible Add-Entry Forms',
+                description: 'The shower and laundry "Add Record" forms are now collapsed by default, freeing up screen space while still accessible with one click.',
+            },
+        ],
+    },
     {
         version: '0.1.0',
         date: 'January 20, 2026',

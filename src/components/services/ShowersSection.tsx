@@ -16,7 +16,7 @@ import { ShowerDetailModal } from './ShowerDetailModal';
 import { SlotBlockModal } from '../admin/SlotBlockModal';
 import { EndServiceDayPanel } from './EndServiceDayPanel';
 import { ServiceDatePicker } from './ServiceDatePicker';
-import { LayoutGrid, List, Settings } from 'lucide-react';
+import { LayoutGrid, List, Settings, ChevronDown } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
 export function ShowersSection() {
@@ -36,6 +36,7 @@ export function ShowersSection() {
     const [backfillGuestId, setBackfillGuestId] = useState('');
     const [backfillSlotTime, setBackfillSlotTime] = useState('');
     const [isAddingBackfill, setIsAddingBackfill] = useState(false);
+    const [showAddForm, setShowAddForm] = useState(false);
 
     // Check if user is admin/staff
     const userRole = (session?.user as any)?.role || '';
@@ -199,83 +200,99 @@ export function ShowersSection() {
             )}
 
             {isAdmin && (
-                <div className="bg-white border border-gray-200 rounded-xl p-4">
-                    <p className="text-[11px] text-gray-500 mb-3" title="Entries added here save to the date currently selected above.">
-                        Entries save to selected date: {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </p>
-                    <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-                        <div className="flex-1">
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Add Individual Shower Record</p>
-                            <select
-                                value={backfillGuestId}
-                                onChange={(event) => setBackfillGuestId(event.target.value)}
-                                className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
-                            >
-                                <option value="">Select guest</option>
-                                {selectableGuests.map((guest) => {
-                                    const displayName = guest.preferredName || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest';
-                                    return (
-                                        <option key={guest.id} value={guest.id}>
-                                            {displayName}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => setShowAddForm(!showAddForm)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                        aria-expanded={showAddForm}
+                    >
+                        <span className="flex items-center gap-2">
+                            <ShowerHead size={16} className="text-sky-600" />
+                            Add Shower Record
+                            <span className="text-[11px] font-normal text-gray-400">
+                                (saves to {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                            </span>
+                        </span>
+                        <ChevronDown size={16} className={cn("text-gray-400 transition-transform", showAddForm && "rotate-180")} />
+                    </button>
+                    {showAddForm && (
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                            <div className="flex flex-col lg:flex-row lg:items-end gap-3 pt-3">
+                                <div className="flex-1">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Add Individual Shower Record</p>
+                                    <select
+                                        value={backfillGuestId}
+                                        onChange={(event) => setBackfillGuestId(event.target.value)}
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                    >
+                                        <option value="">Select guest</option>
+                                        {selectableGuests.map((guest) => {
+                                            const displayName = guest.preferredName || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest';
+                                            return (
+                                                <option key={guest.id} value={guest.id}>
+                                                    {displayName}
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                </div>
+                                <div className="w-full lg:w-56">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Slot (Optional)</p>
+                                    <select
+                                        value={backfillSlotTime}
+                                        onChange={(event) => setBackfillSlotTime(event.target.value)}
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                    >
+                                        <option value="">No slot time</option>
+                                        {selectedDateSlots.map((slotTime) => (
+                                            <option key={slotTime} value={slotTime}>
+                                                {formatSlotLabel(slotTime)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleAddShowerRecord}
+                                        disabled={!backfillGuestId || isAddingBackfill}
+                                        className={cn(
+                                            "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
+                                            !backfillGuestId || isAddingBackfill
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-sky-600 text-white hover:bg-sky-700'
+                                        )}
+                                    >
+                                        {isAddingBackfill ? 'Saving...' : 'Add Shower'}
+                                    </button>
+                                    <button
+                                        onClick={handleAddCompletedShower}
+                                        disabled={!backfillGuestId || isAddingBackfill}
+                                        className={cn(
+                                            "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
+                                            !backfillGuestId || isAddingBackfill
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                        )}
+                                    >
+                                        Add Done
+                                    </button>
+                                    <button
+                                        onClick={handleAddShowerWaitlist}
+                                        disabled={!backfillGuestId || isAddingBackfill}
+                                        className={cn(
+                                            "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
+                                            !backfillGuestId || isAddingBackfill
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-amber-500 text-white hover:bg-amber-600'
+                                        )}
+                                    >
+                                        Add Waitlist
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div className="w-full lg:w-56">
-                            <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Slot (Optional)</p>
-                            <select
-                                value={backfillSlotTime}
-                                onChange={(event) => setBackfillSlotTime(event.target.value)}
-                                className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
-                            >
-                                <option value="">No slot time</option>
-                                {selectedDateSlots.map((slotTime) => (
-                                    <option key={slotTime} value={slotTime}>
-                                        {formatSlotLabel(slotTime)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleAddShowerRecord}
-                                disabled={!backfillGuestId || isAddingBackfill}
-                                className={cn(
-                                    "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
-                                    !backfillGuestId || isAddingBackfill
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-sky-600 text-white hover:bg-sky-700'
-                                )}
-                            >
-                                {isAddingBackfill ? 'Saving...' : 'Add Shower'}
-                            </button>
-                            <button
-                                onClick={handleAddCompletedShower}
-                                disabled={!backfillGuestId || isAddingBackfill}
-                                className={cn(
-                                    "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
-                                    !backfillGuestId || isAddingBackfill
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                )}
-                            >
-                                Add Done
-                            </button>
-                            <button
-                                onClick={handleAddShowerWaitlist}
-                                disabled={!backfillGuestId || isAddingBackfill}
-                                className={cn(
-                                    "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
-                                    !backfillGuestId || isAddingBackfill
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-amber-500 text-white hover:bg-amber-600'
-                                )}
-                            >
-                                Add Waitlist
-                            </button>
-                        </div>
-                    </div>
+                    )}
                 </div>
             )}
 
@@ -386,6 +403,7 @@ export function ShowersSection() {
                 <CompactShowerList
                     records={currentList}
                     onGuestClick={handleGuestClick}
+                    readOnly={isViewingPast}
                 />
             ) : (
                 /* Grid of Shower Cards */

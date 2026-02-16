@@ -121,6 +121,8 @@ describe('ShowersSection Time Travel', () => {
     it('allows staff to use historical add actions', () => {
         mockRole = 'staff';
         render(<ShowersSection />);
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Shower Record/ }));
         expect(screen.getByRole('button', { name: 'Add Done' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Add Shower' })).toBeInTheDocument();
     });
@@ -131,6 +133,9 @@ describe('ShowersSection Time Travel', () => {
         await act(async () => {
             fireEvent.click(screen.getByTestId('go-to-yesterday'));
         });
+
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Shower Record/ }));
 
         fireEvent.change(screen.getByDisplayValue('Select guest'), {
             target: { value: 'g1' },
