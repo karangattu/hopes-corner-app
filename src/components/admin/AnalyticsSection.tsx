@@ -391,28 +391,44 @@ export function AnalyticsSection() {
     const demographics = useMemo(() => {
         const activeGuestIds = new Set<string>();
 
-        // Collect guest IDs based on selected meal type filters
+        // Collect guest IDs based on selected programs and meal type filters
         const addMealGuestIds = (records: Array<{ date?: string; dateKey?: string; guestId?: string }> = []) => {
             records
                 .filter((r) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
                 .forEach((r) => r.guestId && activeGuestIds.add(r.guestId));
         };
 
-        if (demoMealTypeFilters.guest) addMealGuestIds(mealRecords);
-        if (demoMealTypeFilters.rv) addMealGuestIds(rvMealRecords);
-        if (demoMealTypeFilters.extras) addMealGuestIds(extraMealRecords);
-        if (demoMealTypeFilters.dayWorker) addMealGuestIds(dayWorkerMealRecords);
-        if (demoMealTypeFilters.shelter) addMealGuestIds(shelterMealRecords);
-        if (demoMealTypeFilters.unitedEffort) addMealGuestIds(unitedEffortMealRecords);
-        if (demoMealTypeFilters.lunchBags) addMealGuestIds(lunchBagRecords);
+        // Include meal guests only when Meals program is selected
+        if (selectedPrograms.includes('meals')) {
+            if (demoMealTypeFilters.guest) addMealGuestIds(mealRecords);
+            if (demoMealTypeFilters.rv) addMealGuestIds(rvMealRecords);
+            if (demoMealTypeFilters.extras) addMealGuestIds(extraMealRecords);
+            if (demoMealTypeFilters.dayWorker) addMealGuestIds(dayWorkerMealRecords);
+            if (demoMealTypeFilters.shelter) addMealGuestIds(shelterMealRecords);
+            if (demoMealTypeFilters.unitedEffort) addMealGuestIds(unitedEffortMealRecords);
+            if (demoMealTypeFilters.lunchBags) addMealGuestIds(lunchBagRecords);
+        }
 
-        // Only include shower/laundry service records when all meal types are selected (no meal-type filtering active)
-        const allMealTypesSelected = Object.values(demoMealTypeFilters).every(v => v);
-        if (allMealTypesSelected) {
+        // Include service guests based on their respective program selections
+        if (selectedPrograms.includes('showers')) {
             showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
                 .forEach(r => activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('laundry')) {
             laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
                 .forEach(r => activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('bicycles')) {
+            bicycleRecords.filter(r => isInRange(dateKeyOf(r), dateRange.start, dateRange.end) && r.status !== 'cancelled')
+                .forEach(r => r.guestId && activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('haircuts')) {
+            (haircutRecords || []).filter((r: { date: string; dateKey?: string; guestId?: string }) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
+                .forEach((r: { guestId?: string }) => r.guestId && activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('holidays')) {
+            (holidayRecords || []).filter((r: { date: string; dateKey?: string; guestId?: string }) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
+                .forEach((r: { guestId?: string }) => r.guestId && activeGuestIds.add(r.guestId));
         }
 
         // Apply demographic filters to active guests
@@ -450,7 +466,8 @@ export function AnalyticsSection() {
             total: activeGuests.length
         };
     }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords,
-        unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, guests, isInRange,
+        unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords,
+        haircutRecords, holidayRecords, guests, isInRange, dateKeyOf, selectedPrograms,
         demoMealTypeFilters, filterLocation, filterAgeGroup, filterGender, filterHousing]);
 
     // Unique locations from all guests for the filter dropdown
@@ -752,8 +769,8 @@ export function AnalyticsSection() {
     // Render Demographics
     const renderDemographics = () => (
         <div className="space-y-6">
-            {/* Meal Type Filters */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            {/* Meal Type Filters — only visible when Meals program is selected */}
+            {selectedPrograms.includes('meals') && <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                         <Utensils size={16} className="text-gray-400" />
@@ -788,7 +805,7 @@ export function AnalyticsSection() {
                         );
                     })}
                 </div>
-            </div>
+            </div>}
 
             {/* Demographic Filters */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">

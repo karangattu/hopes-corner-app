@@ -543,3 +543,94 @@ describe('AnalyticsSection Overview and Trends data', () => {
         });
     });
 });
+
+describe('AnalyticsSection Demographics program-aware filtering', () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const mockGuests = [
+        { id: 'g1', location: 'Mountain View', age: 'Adult 18-59', gender: 'Male', housingStatus: 'Unhoused' },
+        { id: 'g2', location: 'Palo Alto', age: 'Senior 60+', gender: 'Female', housingStatus: 'Housed' },
+        { id: 'g3', location: 'San Jose', age: 'Adult 18-59', gender: 'Male', housingStatus: 'Housed' },
+    ];
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        vi.mocked(useMealsStore).mockImplementation((selector: any) => {
+            const state = {
+                mealRecords: [],
+                rvMealRecords: [],
+                extraMealRecords: [],
+                dayWorkerMealRecords: [],
+                shelterMealRecords: [],
+                unitedEffortMealRecords: [],
+                lunchBagRecords: [],
+                holidayRecords: [],
+                haircutRecords: [],
+            };
+            return typeof selector === 'function' ? selector(state) : state;
+        });
+
+        vi.mocked(useServicesStore).mockImplementation((selector: any) => {
+            const state = {
+                showerRecords: [
+                    { date: today, guestId: 'g1', status: 'done' },
+                    { date: today, guestId: 'g2', status: 'done' },
+                ],
+                laundryRecords: [
+                    { date: today, guestId: 'g3', status: 'done' },
+                ],
+                bicycleRecords: [],
+            };
+            return typeof selector === 'function' ? selector(state) : state;
+        });
+
+        vi.mocked(useGuestsStore).mockImplementation((selector: any) => {
+            const state = { guests: mockGuests };
+            return typeof selector === 'function' ? selector(state) : state;
+        });
+
+        vi.mocked(useDonationsStore).mockReturnValue({} as any);
+    });
+
+    it('hides meal type filters when meals program is deselected', () => {
+        render(<AnalyticsSection />);
+
+        fireEvent.click(screen.getByText('Demographics'));
+
+        // Meal Types filter should initially be visible (all programs selected by default)
+        expect(screen.getByText('Meal Types')).toBeDefined();
+
+        // Deselect Meals program
+        fireEvent.click(screen.getByText('Meals'));
+
+        // Meal Types filter should no longer be visible
+        expect(screen.queryByText('Meal Types')).toBeNull();
+    });
+
+    it('shows shower/laundry guests in demographics when their programs are selected', () => {
+        render(<AnalyticsSection />);
+
+        fireEvent.click(screen.getByText('Demographics'));
+
+        // With all programs selected by default, shower + laundry guests (g1, g2, g3) should appear
+        // The badge shows "3 active guests"
+        expect(screen.getByText(/3 active guests/i)).toBeDefined();
+    });
+
+    it('shows only shower guests when only showers program is selected', () => {
+        render(<AnalyticsSection />);
+
+        fireEvent.click(screen.getByText('Demographics'));
+
+        // Deselect everything except Showers
+        fireEvent.click(screen.getByText('Meals'));
+        fireEvent.click(screen.getByText('Laundry'));
+        fireEvent.click(screen.getByText('Bicycles'));
+        fireEvent.click(screen.getByText('Haircuts'));
+        fireEvent.click(screen.getByText('Holidays'));
+
+        // Only showers selected: g1 and g2 have done shower records
+        expect(screen.getByText(/2 active guests/i)).toBeDefined();
+    });
+});
