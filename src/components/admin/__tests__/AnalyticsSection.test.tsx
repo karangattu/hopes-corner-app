@@ -530,7 +530,12 @@ describe('AnalyticsSection Overview and Trends data', () => {
     it('counts only done bicycles in overview (matching dashboard logic)', () => {
         render(<AnalyticsSection />);
         // Only 'done' status bicycle records are counted (1 out of 4: pending, in_progress, done, cancelled)
+        // Shows both services count and visits count
         expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+        // Should show "visit" label (singular)
+        expect(screen.getByText('1 visit')).toBeDefined();
+        // Should show "services" label
+        expect(screen.getByText('services')).toBeDefined();
     });
 
     it('renders bicycles and haircuts series in trends chart', async () => {
@@ -542,6 +547,26 @@ describe('AnalyticsSection Overview and Trends data', () => {
             expect(screen.getByTestId('area-bicycles')).toBeDefined();
             expect(screen.getByTestId('area-haircuts')).toBeDefined();
         });
+    });
+
+    it('counts total repair types as services when bicycle has multiple repairTypes', () => {
+        vi.mocked(useServicesStore).mockImplementation((selector: any) => {
+            const state = {
+                showerRecords: [],
+                laundryRecords: [],
+                bicycleRecords: [
+                    { date: today, guestId: 'g1', status: 'done', repairTypes: ['Flat Tire', 'Brakes', 'Chain'] },
+                    { date: today, guestId: 'g2', status: 'done', repairTypes: ['New Bicycle'] },
+                ],
+            };
+            return typeof selector === 'function' ? selector(state) : state;
+        });
+
+        render(<AnalyticsSection />);
+        // 2 visits, 4 services (3 + 1)
+        expect(screen.getByText('2 visits')).toBeDefined();
+        expect(screen.getByText('4')).toBeDefined();
+        expect(screen.getByText('services')).toBeDefined();
     });
 });
 

@@ -200,6 +200,12 @@ export function AnalyticsSection() {
         return d >= start && d <= end;
     }, []);
 
+    /** Count total individual repair services in a bicycle record (matches monthly summary logic). */
+    const countBicycleServices = useCallback((record: any): number => {
+        const types: string[] = record.repairTypes || (record.repairType ? [record.repairType] : []);
+        return types.length || 1; // at least 1 service per visit
+    }, []);
+
     const dateKeyOf = useCallback((record: any) => {
         return record?.dateKey || (typeof record?.date === 'string' ? record.date.split('T')[0] : '');
     }, []);
@@ -239,11 +245,11 @@ export function AnalyticsSection() {
             addToMap(haircutsByDay, dateKeyOf(r), 1);
         }
         for (const r of bicycleRecords) {
-            if (r.status === 'done') addToMap(bicyclesDoneByDay, dateKeyOf(r), 1);
+            if (r.status === 'done') addToMap(bicyclesDoneByDay, dateKeyOf(r), countBicycleServices(r));
         }
 
         return { mealsByDay, showersDoneByDay, laundryDoneByDay, bicyclesDoneByDay, haircutsByDay };
-    }, [mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, dateKeyOf]);
+    }, [mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, dateKeyOf, countBicycleServices]);
 
     // Calculate metrics for the selected range
     const metrics = useMemo(() => {
@@ -270,9 +276,10 @@ export function AnalyticsSection() {
             .filter(r => isRecordInRange(r) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status))
             .length;
 
-        const bicycles = bicycleRecords
-            .filter(r => isRecordInRange(r) && r.status === 'done')
-            .length;
+        const doneBicycles = bicycleRecords
+            .filter(r => isRecordInRange(r) && r.status === 'done');
+        const bicycles = doneBicycles.length;
+        const bicycleServices = doneBicycles.reduce((sum, r) => sum + countBicycleServices(r), 0);
 
         const haircuts = (haircutRecords || [])
             .filter((r: { date: string; dateKey?: string }) => isRecordInRange(r))
@@ -302,8 +309,8 @@ export function AnalyticsSection() {
         bicycleRecords.filter(r => isRecordInRange(r) && r.status === 'done')
             .forEach(r => r.guestId && guestIds.add(r.guestId));
 
-        return { meals, showers, laundry, bicycles, haircuts, holidays, uniqueGuests: guestIds.size };
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, holidayRecords, isInRange, dateKeyOf]);
+        return { meals, showers, laundry, bicycles, bicycleServices, haircuts, holidays, uniqueGuests: guestIds.size };
+    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, holidayRecords, isInRange, dateKeyOf, countBicycleServices]);
 
     // Calculate comparison metrics (previous period)
     const comparison = useMemo(() => {
@@ -337,14 +344,17 @@ export function AnalyticsSection() {
         const prevLaundry = laundryRecords
             .filter(r => isRecordInPreviousRange(r) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status)).length;
 
-        const prevBicycles = bicycleRecords
-            .filter(r => isRecordInPreviousRange(r) && r.status === 'done').length;
+        const prevDoneBicycles = bicycleRecords
+            .filter(r => isRecordInPreviousRange(r) && r.status === 'done');
+        const prevBicycles = prevDoneBicycles.length;
+        const prevBicycleServices = prevDoneBicycles.reduce((sum, r) => sum + countBicycleServices(r), 0);
 
         return {
             meals: metrics.meals - prevMeals,
             showers: metrics.showers - prevShowers,
             laundry: metrics.laundry - prevLaundry,
             bicycles: metrics.bicycles - prevBicycles,
+            bicycleServices: metrics.bicycleServices - prevBicycleServices,
         };
     }, [dateRange, showComparison, metrics, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, isInRange, dateKeyOf]);
 
@@ -570,11 +580,15 @@ export function AnalyticsSection() {
                             <Bike size={18} />
                             <span className="font-bold text-xs uppercase tracking-wider">Bicycles</span>
                         </div>
-                        <p className="text-3xl font-black text-emerald-900">{metrics.bicycles.toLocaleString()}</p>
+                        <div className="flex items-baseline gap-1.5">
+                            <p className="text-3xl font-black text-emerald-900">{metrics.bicycleServices.toLocaleString()}</p>
+                            <span className="text-xs font-bold text-emerald-600/70">services</span>
+                        </div>
+                        <p className="text-xs text-emerald-700/60 font-medium mt-0.5">{metrics.bicycles.toLocaleString()} {metrics.bicycles === 1 ? 'visit' : 'visits'}</p>
                         {comparison && (
-                            <div className={cn("flex items-center gap-1 mt-2 text-xs font-bold", comparison.bicycles >= 0 ? "text-emerald-600" : "text-red-600")}>
-                                {comparison.bicycles >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                                {Math.abs(comparison.bicycles)} vs prev
+                            <div className={cn("flex items-center gap-1 mt-2 text-xs font-bold", comparison.bicycleServices >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                {comparison.bicycleServices >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                {Math.abs(comparison.bicycleServices)} vs prev
                             </div>
                         )}
                     </div>
