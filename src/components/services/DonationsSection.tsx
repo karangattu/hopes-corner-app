@@ -92,10 +92,16 @@ export const groupDonationsByItem = (records: DonationRecord[]): GroupedDonation
     });
 };
 
-// Get unique recent item names for quick selection
-export const getRecentItemNames = (records: DonationRecord[], limit = 5): string[] => {
+// Quick select item with associated donor info
+export interface QuickSelectItem {
+    itemName: string;
+    donor: string;
+}
+
+// Get unique recent item names (with most-recent donor) for quick selection
+export const getRecentItemNames = (records: DonationRecord[], limit = 5): QuickSelectItem[] => {
     const seen = new Set<string>();
-    const recent: string[] = [];
+    const recent: QuickSelectItem[] = [];
 
     // Sort by most recent first
     const sorted = [...records].sort((a, b) => {
@@ -108,7 +114,7 @@ export const getRecentItemNames = (records: DonationRecord[], limit = 5): string
         const name = (record.itemName || '').trim();
         if (name && !seen.has(name.toLowerCase())) {
             seen.add(name.toLowerCase());
-            recent.push(name);
+            recent.push({ itemName: name, donor: (record.donor || '').trim() });
             if (recent.length >= limit) break;
         }
     }
@@ -250,8 +256,8 @@ const QuickSelectItems = ({
     onSelect,
     currentValue
 }: {
-    recentItems: string[];
-    onSelect: (name: string) => void;
+    recentItems: QuickSelectItem[];
+    onSelect: (item: QuickSelectItem) => void;
     currentValue: string;
 }) => {
     if (recentItems.length === 0) return null;
@@ -260,19 +266,20 @@ const QuickSelectItems = ({
         <div className="mt-2">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Quick Select</p>
             <div className="flex flex-wrap gap-1.5">
-                {recentItems.map((name) => (
+                {recentItems.map((item) => (
                     <button
-                        key={name}
+                        key={item.itemName}
                         type="button"
-                        onClick={() => onSelect(name)}
+                        onClick={() => onSelect(item)}
+                        title={item.donor ? `Donor: ${item.donor}` : undefined}
                         className={cn(
                             "px-2.5 py-1 rounded-lg text-xs font-medium transition-all border",
-                            currentValue.toLowerCase() === name.toLowerCase()
+                            currentValue.toLowerCase() === item.itemName.toLowerCase()
                                 ? "bg-emerald-100 text-emerald-700 border-emerald-200"
                                 : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200"
                         )}
                     >
-                        {name}
+                        {item.itemName}
                     </button>
                 ))}
             </div>
@@ -425,9 +432,13 @@ export const DonationsSection = () => {
         }
     };
 
-    // Quick select handler
-    const handleQuickSelect = (itemName: string) => {
-        setGeneralForm(prev => ({ ...prev, itemName }));
+    // Quick select handler — auto-populates item name and donor
+    const handleQuickSelect = (item: QuickSelectItem) => {
+        setGeneralForm(prev => ({
+            ...prev,
+            itemName: item.itemName,
+            ...(item.donor ? { donor: item.donor } : {})
+        }));
     };
 
     return (
