@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WashingMachine, Clock, Wind, Package, CheckCircle, Trash2, User, Timer, Edit3, Save, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
+import { WashingMachine, Clock, Wind, Package, CheckCircle, Trash2, User, Timer, Edit3, Save, ChevronDown, ChevronUp, GripVertical, AlertTriangle } from 'lucide-react';
 import {
     DndContext,
     DragOverlay,
@@ -83,6 +83,7 @@ export function LaundrySection() {
     const [backfillBagNumber, setBackfillBagNumber] = useState('');
     const [isAddingBackfill, setIsAddingBackfill] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
+    const [showLegacySection, setShowLegacySection] = useState(true);
 
     // Check if user is admin/staff
     const userRole = (session?.user as any)?.role || '';
@@ -98,19 +99,19 @@ export function LaundrySection() {
             return laundryRecords.filter(r => pacificDateStringFrom(r.date) === selectedDate);
         }
         
-        // Current view: today's records + any past records that are not completed (pending pickup/active)
+        // Current view: only today's records
+        return laundryRecords.filter(r => pacificDateStringFrom(r.date) === today);
+    }, [laundryRecords, selectedDate, isViewingPast, today]);
+
+    // Legacy laundry: past-day records still needing pickup (not completed/cancelled)
+    const legacyLaundry = useMemo(() => {
+        if (isViewingPast) return [];
+        const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
         return laundryRecords.filter(r => {
             const recordDate = pacificDateStringFrom(r.date);
-            const isToday = recordDate === today;
-            const isPast = recordDate < today;
-
-            // Active statuses are anything NOT in this list
-            const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
-            const isActive = !completedStatuses.has(r.status);
-
-            return isToday || (isPast && isActive);
+            return recordDate < today && !completedStatuses.has(r.status);
         });
-    }, [laundryRecords, selectedDate, isViewingPast, today]);
+    }, [laundryRecords, isViewingPast, today]);
 
     const onsiteLaundry = activeLaundry.filter(r => r.laundryType === 'onsite' || !r.laundryType);
     const offsiteLaundry = activeLaundry.filter(r => r.laundryType === 'offsite');
@@ -337,6 +338,71 @@ export function LaundrySection() {
                     onEndLaundryDay={handleEndLaundryDay}
                     isAdmin={isAdmin}
                 />
+            )}
+
+            {/* Legacy Laundry Pickup Section */}
+            {!isViewingPast && legacyLaundry.length > 0 && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl overflow-hidden" data-testid="legacy-laundry-section">
+                    <button
+                        type="button"
+                        onClick={() => setShowLegacySection(!showLegacySection)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-100/50 transition-colors"
+                        aria-expanded={showLegacySection}
+                    >
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle size={18} className="text-amber-600" />
+                            <div className="text-left">
+                                <p className="text-sm font-bold text-amber-800">
+                                    Previous Day Laundry — Pending Pickup ({legacyLaundry.length})
+                                </p>
+                                <p className="text-xs text-amber-600">
+                                    These bookings are from previous days and still need to be picked up. They do not block today&apos;s slots.
+                                </p>
+                            </div>
+                        </div>
+                        <ChevronDown size={16} className={cn("text-amber-500 transition-transform", showLegacySection && "rotate-180")} />
+                    </button>
+                    {showLegacySection && (
+                        <div className="px-4 pb-4 border-t border-amber-200">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-3">
+                                {legacyLaundry.map((record) => {
+                                    const { primaryName, legalName, hasPreferred } = getGuestNameDetails(record.guestId);
+                                    const recordDateStr = new Date(record.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                    const isOnsite = record.laundryType === 'onsite' || !record.laundryType;
+                                    const statusLabel = STATUS_COLUMNS.find(c => c.id === record.status)?.title
+                                        || OFFSITE_STATUS_COLUMNS.find(c => c.id === record.status)?.title
+                                        || record.status;
+                                    return (
+                                        <div key={record.id} className="bg-white rounded-lg border border-amber-200 shadow-sm p-3">
+                                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                <span className="font-bold text-xs text-gray-900 truncate" title={hasPreferred ? `${primaryName} (${legalName})` : legalName}>
+                                                    {primaryName}
+                                                </span>
+                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 whitespace-nowrap">
+                                                    {statusLabel}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 space-y-0.5">
+                                                <p>From: {recordDateStr}</p>
+                                                {record.bagNumber && <p className="text-purple-600">Bag #{record.bagNumber}</p>}
+                                                <p>{isOnsite ? 'On-site' : 'Off-site'}{record.time ? ` • ${record.time}` : ''}</p>
+                                            </div>
+                                            <div className="flex gap-1.5 mt-2">
+                                                <button
+                                                    onClick={() => handleStatusChange(record, isOnsite ? 'picked_up' : 'offsite_picked_up')}
+                                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-700 transition-colors"
+                                                >
+                                                    <CheckCircle size={12} />
+                                                    Mark Picked Up
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* On-site Laundry Kanban */}

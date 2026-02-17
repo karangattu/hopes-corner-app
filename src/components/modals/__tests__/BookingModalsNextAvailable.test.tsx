@@ -189,4 +189,26 @@ describe('LaundryBookingModal — Book Next Available', () => {
         // Should have attempted to book with onsite type and slot label
         expect(mockAddLaundryRecord).toHaveBeenCalledWith('g1', 'onsite', expect.any(String), '');
     });
+
+    it('does not count past-day laundry records as booked slots', async () => {
+        // Set up laundry records from a past date occupying a slot
+        const { useServicesStore } = await import('@/stores/useServicesStore');
+        (useServicesStore as any).mockReturnValue({
+            showerRecords: [],
+            laundryRecords: [
+                { id: 'past-1', guestId: 'g2', time: '07:30 - 08:30', laundryType: 'onsite', status: 'done', date: '2020-01-01', createdAt: '2020-01-01T07:30:00Z' },
+            ],
+            addShowerRecord: mockAddShowerRecord,
+            addShowerWaitlist: mockAddShowerWaitlist,
+            addLaundryRecord: mockAddLaundryRecord,
+        });
+
+        render(<LaundryBookingModal />);
+
+        // The first slot (07:30 - 08:30) should still be available since the record is from 2020
+        expect(screen.getByText('Book Next Available Slot')).toBeDefined();
+        expect(screen.getByText(/Next open:/)).toBeDefined();
+        // Should NOT say "All on-site slots are booked"
+        expect(screen.queryByText('All on-site slots are booked')).toBeNull();
+    });
 });

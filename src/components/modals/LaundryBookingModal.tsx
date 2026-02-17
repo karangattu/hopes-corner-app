@@ -15,7 +15,7 @@ import { useBlockedSlotsStore } from '@/stores/useBlockedSlotsStore';
 import { ServiceCardReminder } from '@/components/ui/ReminderIndicator';
 import toast from 'react-hot-toast';
 import { useEffect } from 'react';
-import { todayPacificDateString } from '@/lib/utils/date';
+import { todayPacificDateString, pacificDateStringFrom } from '@/lib/utils/date';
 
 export function LaundryBookingModal() {
     const { laundryPickerGuest, setLaundryPickerGuest } = useModalStore();
@@ -38,10 +38,18 @@ export function LaundryBookingModal() {
     const today = todayPacificDateString();
     const allSlots = generateLaundrySlots();
 
+    // Only consider today's records when determining slot availability.
+    // Past-day records (e.g. "done" from Monday) must NOT block today's slots.
+    const todayLaundryRecords = useMemo(() => {
+        return (laundryRecords || []).filter(
+            (r) => pacificDateStringFrom(r.date) === today
+        );
+    }, [laundryRecords, today]);
+
     const slotsWithStatus = useMemo(() => {
         if (!laundryPickerGuest) return [];
         return allSlots.map((slotLabel) => {
-            const isBooked = (laundryRecords || []).some(
+            const isBooked = todayLaundryRecords.some(
                 (r) => r.time === slotLabel && r.laundryType === 'onsite'
             );
             const isBlocked = isSlotBlocked('laundry', slotLabel, today);
@@ -52,7 +60,7 @@ export function LaundryBookingModal() {
                 isBlocked
             };
         });
-    }, [allSlots, laundryRecords, laundryPickerGuest, isSlotBlocked]);
+    }, [allSlots, todayLaundryRecords, laundryPickerGuest, isSlotBlocked]);
 
     const nextAvailableSlot = useMemo(() => {
         return slotsWithStatus.find(s => !s.isBooked && !s.isBlocked);

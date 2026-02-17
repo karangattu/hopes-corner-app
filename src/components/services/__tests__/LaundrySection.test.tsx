@@ -125,4 +125,50 @@ describe('LaundrySection Component', () => {
             expect(screen.getByTestId('end-service-panel')).toBeDefined();
         });
     });
+
+    describe('Legacy Laundry Section', () => {
+        it('does not show legacy section when all records are from today', () => {
+            render(<LaundrySection />);
+            expect(screen.queryByTestId('legacy-laundry-section')).toBeNull();
+        });
+
+        it('shows legacy section when past-day records have active status', async () => {
+            const { useServicesStore } = await import('@/stores/useServicesStore');
+            (useServicesStore as any).mockReturnValue({
+                laundryRecords: [
+                    { id: 'l1', guestId: 'g1', status: 'waiting', time: '09:00-09:30', bagNumber: '1', date: '2026-01-08', laundryType: 'onsite', createdAt: '2026-01-08T09:00:00Z' },
+                    // Past-day record that is still "done" and needs pickup
+                    { id: 'l-legacy', guestId: 'g2', status: 'done', time: '10:00-10:30', bagNumber: '5', date: '2026-01-07', laundryType: 'onsite', createdAt: '2026-01-07T10:00:00Z' },
+                ],
+                addLaundryRecord: vi.fn().mockResolvedValue({ id: 'l3' }),
+                updateLaundryStatus: vi.fn().mockResolvedValue(true),
+                updateLaundryBagNumber: vi.fn().mockResolvedValue(true),
+                cancelMultipleLaundry: vi.fn().mockResolvedValue(true),
+                loadFromSupabase: vi.fn().mockResolvedValue(undefined),
+            });
+
+            render(<LaundrySection />);
+            expect(screen.getByTestId('legacy-laundry-section')).toBeDefined();
+            expect(screen.getByText(/Previous Day Laundry/)).toBeDefined();
+        });
+
+        it('does not show legacy section for past-day records that are picked up', async () => {
+            const { useServicesStore } = await import('@/stores/useServicesStore');
+            (useServicesStore as any).mockReturnValue({
+                laundryRecords: [
+                    { id: 'l1', guestId: 'g1', status: 'waiting', time: '09:00-09:30', bagNumber: '1', date: '2026-01-08', laundryType: 'onsite', createdAt: '2026-01-08T09:00:00Z' },
+                    // Past-day record that has been picked up — should not appear in legacy
+                    { id: 'l-old', guestId: 'g2', status: 'picked_up', time: '10:00-10:30', bagNumber: '5', date: '2026-01-07', laundryType: 'onsite', createdAt: '2026-01-07T10:00:00Z' },
+                ],
+                addLaundryRecord: vi.fn().mockResolvedValue({ id: 'l3' }),
+                updateLaundryStatus: vi.fn().mockResolvedValue(true),
+                updateLaundryBagNumber: vi.fn().mockResolvedValue(true),
+                cancelMultipleLaundry: vi.fn().mockResolvedValue(true),
+                loadFromSupabase: vi.fn().mockResolvedValue(undefined),
+            });
+
+            render(<LaundrySection />);
+            expect(screen.queryByTestId('legacy-laundry-section')).toBeNull();
+        });
+    });
 });
