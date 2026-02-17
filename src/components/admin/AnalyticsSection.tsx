@@ -330,7 +330,7 @@ export function AnalyticsSection() {
             const dayBicycles = dailyCountMaps.bicyclesDoneByDay.get(dateStr) || 0;
 
             days.push({
-                date: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                date: `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} (${d.toLocaleDateString('en-US', { weekday: 'short' })})`,
                 fullDate: dateStr,
                 meals: dayMeals,
                 showers: dayShowers,
@@ -366,11 +366,14 @@ export function AnalyticsSection() {
         if (demoMealTypeFilters.unitedEffort) addMealGuestIds(unitedEffortMealRecords);
         if (demoMealTypeFilters.lunchBags) addMealGuestIds(lunchBagRecords);
 
-        // Include service records (showers, laundry)
-        showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
-            .forEach(r => activeGuestIds.add(r.guestId));
-        laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
-            .forEach(r => activeGuestIds.add(r.guestId));
+        // Only include shower/laundry service records when all meal types are selected (no meal-type filtering active)
+        const allMealTypesSelected = Object.values(demoMealTypeFilters).every(v => v);
+        if (allMealTypesSelected) {
+            showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
+                .forEach(r => activeGuestIds.add(r.guestId));
+            laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
+                .forEach(r => activeGuestIds.add(r.guestId));
+        }
 
         // Apply demographic filters to active guests
         const activeGuests = guests.filter(g => {

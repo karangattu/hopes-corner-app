@@ -401,6 +401,13 @@ export default function MonthlySummaryReport() {
             });
         }
 
+        // Compute YTD unique guests across all months using a global Set
+        const ytdUniqueGuestIds = new Set<string>();
+        for (let month = 0; month <= effectiveLastMonth; month++) {
+            const mealsInMonth = filterRecords(mealRecords, selectedYear, month);
+            mealsInMonth.forEach((r: any) => { if (r.guestId) ytdUniqueGuestIds.add(r.guestId); });
+        }
+
         // Totals row
         const totals = {
             month: 'Year to Date',
@@ -408,7 +415,7 @@ export default function MonthlySummaryReport() {
             wednesdayMeals: months.reduce((s, m) => s + m.wednesdayMeals, 0),
             fridayMeals: months.reduce((s, m) => s + m.fridayMeals, 0),
             saturdayMeals: months.reduce((s, m) => s + m.saturdayMeals, 0),
-            uniqueGuests: 0, // Needs global Set
+            uniqueGuests: ytdUniqueGuestIds.size,
             newGuests: months.reduce((s, m) => s + m.newGuests, 0),
             proxyPickups: months.reduce((s, m) => s + m.proxyPickups, 0),
             onsiteHotMeals: months.reduce((s, m) => s + m.onsiteHotMeals, 0),

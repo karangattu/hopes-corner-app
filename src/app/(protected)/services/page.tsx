@@ -65,13 +65,15 @@ export default function ServicesPage() {
     const { loadFromSupabase: loadGuests, guests } = useGuestsStore(
         useShallow((s) => ({ loadFromSupabase: s.loadFromSupabase, guests: s.guests }))
     );
-    const { loadFromSupabase: loadMeals, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords } = useMealsStore(
+    const { loadFromSupabase: loadMeals, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, dayWorkerMealRecords, shelterMealRecords } = useMealsStore(
         useShallow((s) => ({
             loadFromSupabase: s.loadFromSupabase,
             mealRecords: s.mealRecords,
             rvMealRecords: s.rvMealRecords,
             extraMealRecords: s.extraMealRecords,
             unitedEffortMealRecords: s.unitedEffortMealRecords,
+            dayWorkerMealRecords: s.dayWorkerMealRecords,
+            shelterMealRecords: s.shelterMealRecords,
         }))
     );
     const loadDonations = useDonationsStore((s) => s.loadFromSupabase);
@@ -99,11 +101,17 @@ export default function ServicesPage() {
     const metrics = useMemo(() => {
         const dateKeyOf = (r: any) => r?.dateKey || pacificDateStringFrom(r.date);
 
+        const sumCountForToday = (records: any[]) =>
+            records.filter(r => dateKeyOf(r) === today).reduce((sum, r) => sum + (r.count || 0), 0);
+
+        // Meals served today: all types EXCLUDING lunch bags
         const mealsToday = (
-            mealRecords.filter(r => dateKeyOf(r) === today).length +
-            rvMealRecords.filter(r => dateKeyOf(r) === today).length +
-            extraMealRecords.filter(r => dateKeyOf(r) === today).length +
-            unitedEffortMealRecords.filter(r => dateKeyOf(r) === today).length
+            sumCountForToday(mealRecords) +
+            sumCountForToday(rvMealRecords) +
+            sumCountForToday(extraMealRecords) +
+            sumCountForToday(unitedEffortMealRecords) +
+            sumCountForToday(dayWorkerMealRecords) +
+            sumCountForToday(shelterMealRecords)
         );
         
         const uniqueGuestsToday = new Set([
@@ -113,11 +121,14 @@ export default function ServicesPage() {
             ...bicycleRecords.filter(r => dateKeyOf(r) === today).map(r => r.guestId),
         ]).size;
 
-        // Bicycle metrics
-        const bicyclesPending = bicycleRecords.filter(r => r.status !== 'done').length;
+        // Bicycle metrics - only show today's pending repairs
+        const bicyclesPending = bicycleRecords.filter(r => dateKeyOf(r) === today && r.status === 'pending').length;
         const bicyclesCompletedThisWeek = bicycleRecords.filter(r => 
             dateKeyOf(r) >= startOfWeek && r.status === 'done'
         ).length;
+
+        // Laundry completed statuses
+        const laundryCompletedStatuses = ['done', 'picked_up', 'returned', 'offsite_picked_up'];
 
         return {
             totalGuests: guests.length,
@@ -127,7 +138,7 @@ export default function ServicesPage() {
             showersDone: showerRecords.filter(r => dateKeyOf(r) === today && r.status === 'done').length,
             showersActive: showerRecords.filter(r => dateKeyOf(r) === today && (r.status === 'booked' || r.status === 'awaiting')).length,
             showerWaitlist: showerRecords.filter(r => dateKeyOf(r) === today && r.status === 'waitlisted').length,
-            laundryTotal: laundryRecords.filter(r => dateKeyOf(r) === today).length,
+            laundryTotal: laundryRecords.filter(r => dateKeyOf(r) === today && laundryCompletedStatuses.includes(r.status)).length,
             laundryActive: laundryRecords.filter(r => dateKeyOf(r) === today && ['waiting', 'washer', 'dryer'].includes(r.status)).length,
             laundryDone: laundryRecords.filter(r => dateKeyOf(r) === today && r.status === 'done').length,
             bicyclesPending,
@@ -137,7 +148,7 @@ export default function ServicesPage() {
                 laundryRecords.filter(r => dateKeyOf(r) === today).length
             )
         };
-    }, [guests, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, showerRecords, laundryRecords, bicycleRecords, today, startOfWeek]);
+    }, [guests, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, dayWorkerMealRecords, shelterMealRecords, showerRecords, laundryRecords, bicycleRecords, today, startOfWeek]);
 
     const renderContent = () => {
         switch (activeTab) {

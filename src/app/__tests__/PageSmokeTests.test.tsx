@@ -55,7 +55,12 @@ vi.mock('@/stores/useMealsStore', () => ({
             mealRecords: [],
             rvMealRecords: [],
             extraMealRecords: [],
+            dayWorkerMealRecords: [],
+            shelterMealRecords: [],
             unitedEffortMealRecords: [],
+            lunchBagRecords: [],
+            holidayRecords: [],
+            haircutRecords: [],
             loadFromSupabase: vi.fn(),
         };
         return typeof selector === 'function' ? selector(state) : state;
@@ -100,6 +105,23 @@ vi.mock('@/stores/useBlockedSlotsStore', () => ({
         fetchBlockedSlots: vi.fn(() => Promise.resolve()),
         isSlotBlocked: vi.fn(() => false),
     })),
+}));
+
+vi.mock('@/stores/useDonationsStore', () => ({
+    useDonationsStore: vi.fn((selector) => {
+        const state = {
+            donations: [],
+            loadFromSupabase: vi.fn(),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
+}));
+
+vi.mock('@/stores/useModalStore', () => ({
+    useModalStore: vi.fn((selector) => {
+        const state = { openNoteModal: vi.fn() };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useRemindersStore', () => ({

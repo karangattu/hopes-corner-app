@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import {
     BarChart3,
-    Home,
     Download,
     Activity,
     Utensils,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { DashboardOverview } from '@/components/admin/DashboardOverview';
 import { AnalyticsSection } from '@/components/admin/AnalyticsSection';
 import { DataExportSection } from '@/components/admin/DataExportSection';
 import { MealReport } from '@/components/admin/reports/MealReport';
@@ -25,7 +23,6 @@ import { useGuestsStore } from '@/stores/useGuestsStore';
 import { cn } from '@/lib/utils/cn';
 
 const DASHBOARD_TABS = [
-    { id: 'overview', label: 'Overview', icon: Home, color: 'text-indigo-600' },
     { id: 'analytics', label: 'Analytics', icon: Activity, color: 'text-blue-600' },
     { id: 'monthly-report', label: 'Monthly Report', icon: FileText, color: 'text-purple-600' },
     { id: 'meal-report', label: 'Meal Report', icon: Utensils, color: 'text-orange-600' },
@@ -34,7 +31,7 @@ const DASHBOARD_TABS = [
 ];
 
 export default function DashboardPage() {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('analytics');
     const prefersReducedMotion = useReducedMotion();
     const { loadSettings } = useSettingsStore();
     const { loadFromSupabase: loadMeals } = useMealsStore();
@@ -50,13 +47,12 @@ export default function DashboardPage() {
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'overview': return <DashboardOverview />;
             case 'analytics': return <AnalyticsSection />;
             case 'monthly-report': return <MonthlyReportGenerator />;
             case 'meal-report': return <MealReport />;
             case 'monthly-summary': return <MonthlySummaryReport />;
             case 'export': return <DataExportSection />;
-            default: return <DashboardOverview />;
+            default: return <AnalyticsSection />;
         }
     };
 

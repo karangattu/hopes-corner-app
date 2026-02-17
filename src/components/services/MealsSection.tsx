@@ -31,6 +31,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 // Meal category configurations
 const MEAL_CATEGORIES = [
+    { id: 'extra', label: 'Extra Meals', icon: Plus, color: 'orange', description: 'Surplus meals not tied to a guest' },
     { id: 'rv', label: 'RV Meals', icon: Truck, color: 'purple', description: 'RV deliveries' },
     { id: 'day_worker', label: 'Day Worker', icon: Building2, color: 'blue', description: 'Day worker center' },
     { id: 'shelter', label: 'Shelter', icon: Home, color: 'amber', description: 'Shelter meals' },
@@ -123,7 +124,7 @@ export function MealsSection() {
         }, 0);
 
         return {
-            total: sumCount([...guestMeals, ...rvMeals, ...extraMeals, ...dayWorkerMeals, ...shelterMeals, ...ueMeals, ...lunchBags]),
+            total: sumCount([...guestMeals, ...rvMeals, ...extraMeals, ...dayWorkerMeals, ...shelterMeals, ...ueMeals]),
             guestCount: sumCount(guestMeals),
             rvCount: sumCount(rvMeals),
             dayWorkerCount: sumCount(dayWorkerMeals),
@@ -425,7 +426,7 @@ export function MealsSection() {
                             </div>
 
                             <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-3">Bulk Meal Entry</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                                 {MEAL_CATEGORIES.map((category) => {
                                     const Icon = category.icon;
                                     const qty = quantities[category.id] || 0;
@@ -436,6 +437,7 @@ export function MealsSection() {
                                             key={category.id}
                                             className={cn(
                                                 "rounded-2xl border-2 p-4 transition-all",
+                                                category.color === 'orange' && "border-orange-200 bg-orange-50",
                                                 category.color === 'purple' && "border-purple-200 bg-purple-50",
                                                 category.color === 'blue' && "border-blue-200 bg-blue-50",
                                                 category.color === 'amber' && "border-amber-200 bg-amber-50",
@@ -446,6 +448,7 @@ export function MealsSection() {
                                             <div className="flex items-center gap-3 mb-4">
                                                 <div className={cn(
                                                     "p-2.5 rounded-xl shrink-0",
+                                                    category.color === 'orange' && "bg-orange-100 text-orange-600",
                                                     category.color === 'purple' && "bg-purple-100 text-purple-600",
                                                     category.color === 'blue' && "bg-blue-100 text-blue-600",
                                                     category.color === 'amber' && "bg-amber-100 text-amber-600",
@@ -505,10 +508,11 @@ export function MealsSection() {
             </AnimatePresence>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                 <StatCard label="Total Meals" value={dayMetrics.total} color="emerald" />
                 <StatCard label="Guest Meals" value={dayMetrics.guestCount} color="blue" />
                 <StatCard label="Proxy Pickups" value={dayMetrics.proxyPickups} color="indigo" />
+                <StatCard label="Extra Meals" value={dayMetrics.extraCount} color="amber" />
                 <StatCard label="RV Meals" value={dayMetrics.rvCount} color="purple" />
                 <StatCard label="Day Worker" value={dayMetrics.dayWorkerCount} color="sky" />
                 <StatCard label="Lunch Bags" value={dayMetrics.lunchBagCount} color="amber" />
