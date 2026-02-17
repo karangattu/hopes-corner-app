@@ -668,7 +668,7 @@ export function AnalyticsSection() {
         const dayNotes = fullDate ? getNotesForDateRange(fullDate, fullDate) : [];
 
         return (
-            <div className="bg-white/95 backdrop-blur-sm p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm min-w-[180px]">
+            <div className="bg-white p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm min-w-[180px]">
                 <p className="font-bold text-gray-800 mb-2 flex items-center gap-2">
                     {label}
                     {dataPoint?.hasNote && <StickyNote size={12} className="text-amber-500" />}

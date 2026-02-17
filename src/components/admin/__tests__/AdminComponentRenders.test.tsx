@@ -135,6 +135,12 @@ describe('Admin Component Rendering', () => {
         expect(screen.getByText(/Data Export Center/i)).toBeDefined();
     });
 
+    it('DataExportSection includes shower supplies export option', () => {
+        render(<DataExportSection />);
+        expect(screen.getByText('Shower Supplies')).toBeDefined();
+        expect(screen.getByText(/Items distributed during showers/i)).toBeDefined();
+    });
+
     it('SlotBlockManager renders correctly', () => {
         render(<SlotBlockManager serviceType="shower" />);
         expect(screen.getByText(/Manage Shower Slots/i)).toBeDefined();
