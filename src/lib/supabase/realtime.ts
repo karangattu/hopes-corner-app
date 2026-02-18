@@ -9,7 +9,10 @@ type TableName =
     | 'guests'
     | 'guest_warnings'
     | 'guest_proxies'
-    | 'guest_reminders';
+    | 'guest_reminders'
+    | 'blocked_slots'
+    | 'daily_notes'
+    | 'donations';
 
 type ChangeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 

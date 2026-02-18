@@ -1524,4 +1524,25 @@ begin
   ) then
     alter publication supabase_realtime add table public.daily_notes;
   end if;
+
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'blocked_slots'
+  ) then
+    alter publication supabase_realtime add table public.blocked_slots;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'guest_proxies'
+  ) then
+    alter publication supabase_realtime add table public.guest_proxies;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables 
+    where pubname = 'supabase_realtime' and tablename = 'donations'
+  ) then
+    alter publication supabase_realtime add table public.donations;
+  end if;
 end $$;
