@@ -1,6 +1,21 @@
 import "@testing-library/jest-dom";
 import React from "react";
 
+// Mock window.matchMedia for useReducedMotion and other media query hooks
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -102,6 +117,15 @@ vi.mock("framer-motion", () => ({
     scrollXProgress: { get: () => 0 },
   }),
 }));
+
+// Polyfill ResizeObserver for virtualization libs (jsdom doesn't provide it by default)
+if (typeof (globalThis as any).ResizeObserver === 'undefined') {
+  (globalThis as any).ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
 
 // Mock Supabase client
 vi.mock("@/lib/supabase/client", () => ({

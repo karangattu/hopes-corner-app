@@ -27,15 +27,18 @@ const mockLaundryRecords: any[] = [];
 
 vi.mock('@/stores/useServicesStore', () => ({
     useServicesStore: Object.assign(
-        vi.fn(() => ({
-            showerRecords: mockShowerRecords,
-            laundryRecords: mockLaundryRecords,
-            bicycleRecords: [],
-            haircutRecords: [],
-            holidayRecords: [],
-            fetchTodaysRecords: vi.fn(),
-            loadFromSupabase: vi.fn(),
-        })),
+        vi.fn((selector) => {
+            const state = {
+                showerRecords: mockShowerRecords,
+                laundryRecords: mockLaundryRecords,
+                bicycleRecords: [],
+                haircutRecords: [],
+                holidayRecords: [],
+                fetchTodaysRecords: vi.fn(),
+                loadFromSupabase: vi.fn(),
+            };
+            return typeof selector === 'function' ? selector(state) : state;
+        }),
         {
             subscribe: vi.fn(() => () => {}),
             getState: vi.fn(() => ({
@@ -47,23 +50,36 @@ vi.mock('@/stores/useServicesStore', () => ({
 }));
 
 vi.mock('@/stores/useMealsStore', () => ({
-    useMealsStore: vi.fn(() => ({
-        mealRecords: [],
-        rvMealRecords: [],
-        extraMealRecords: [],
-        unitedEffortMealRecords: [],
-        loadFromSupabase: vi.fn(),
-    })),
+    useMealsStore: vi.fn((selector) => {
+        const state = {
+            mealRecords: [],
+            rvMealRecords: [],
+            extraMealRecords: [],
+            dayWorkerMealRecords: [],
+            shelterMealRecords: [],
+            unitedEffortMealRecords: [],
+            lunchBagRecords: [],
+            holidayRecords: [],
+            haircutRecords: [],
+            loadFromSupabase: vi.fn(),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useGuestsStore', () => ({
-    useGuestsStore: vi.fn(() => ({
-        guests: [],
-        searchGuests: vi.fn(),
-        loadFromSupabase: vi.fn(),
-        loadGuestWarningsFromSupabase: vi.fn(),
-        loadGuestProxiesFromSupabase: vi.fn(),
-    })),
+    useGuestsStore: vi.fn((selector) => {
+        const state = {
+            guests: [],
+            warnings: [],
+            guestProxies: [],
+            searchGuests: vi.fn(),
+            loadFromSupabase: vi.fn(),
+            loadGuestWarningsFromSupabase: vi.fn(),
+            loadGuestProxiesFromSupabase: vi.fn(),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useSettingsStore', () => ({
@@ -91,13 +107,33 @@ vi.mock('@/stores/useBlockedSlotsStore', () => ({
     })),
 }));
 
+vi.mock('@/stores/useDonationsStore', () => ({
+    useDonationsStore: vi.fn((selector) => {
+        const state = {
+            donations: [],
+            loadFromSupabase: vi.fn(),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
+}));
+
+vi.mock('@/stores/useModalStore', () => ({
+    useModalStore: vi.fn((selector) => {
+        const state = { openNoteModal: vi.fn() };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
+}));
+
 vi.mock('@/stores/useRemindersStore', () => ({
-    useRemindersStore: vi.fn(() => ({
-        reminders: [],
-        loadFromSupabase: vi.fn(() => Promise.resolve()),
-        getActiveRemindersForGuest: vi.fn(() => []),
-        hasActiveReminder: vi.fn(() => false),
-    })),
+    useRemindersStore: vi.fn((selector) => {
+        const state = {
+            reminders: [],
+            loadFromSupabase: vi.fn(() => Promise.resolve()),
+            getActiveRemindersForGuest: vi.fn(() => []),
+            hasActiveReminder: vi.fn(() => false),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useDailyNotesStore', () => ({
@@ -105,6 +141,7 @@ vi.mock('@/stores/useDailyNotesStore', () => ({
         notes: [],
         isLoading: false,
         loadFromSupabase: vi.fn(() => Promise.resolve()),
+        subscribeToRealtime: vi.fn(() => () => {}),
         addOrUpdateNote: vi.fn(() => Promise.resolve()),
         deleteNote: vi.fn(() => Promise.resolve()),
         getNotesForDate: vi.fn(() => []),

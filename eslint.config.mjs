@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright build artifacts
+    "playwright/.cache/**",
   ]),
   // Custom rule overrides for migrated codebase
   {

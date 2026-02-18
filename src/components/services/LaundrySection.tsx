@@ -2,10 +2,24 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WashingMachine, Clock, Wind, Package, CheckCircle, Trash2, User, Timer, Edit3, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { WashingMachine, Clock, Wind, Package, CheckCircle, Trash2, User, Timer, Edit3, Save, ChevronDown, ChevronUp, GripVertical, AlertTriangle } from 'lucide-react';
+import {
+    DndContext,
+    DragOverlay,
+    PointerSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+    closestCenter,
+    type DragStartEvent,
+    type DragEndEvent,
+    type DragOverEvent,
+} from '@dnd-kit/core';
+import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { todayPacificDateString, pacificDateStringFrom } from '@/lib/utils/date';
+import { generateLaundrySlots } from '@/lib/utils/serviceSlots';
 import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
 import { CompactWaiverIndicator } from '@/components/ui/CompactWaiverIndicator';
@@ -57,12 +71,19 @@ const formatTimeElapsed = (isoTimestamp: string | null): string | null => {
 };
 
 export function LaundrySection() {
-    const { laundryRecords, updateLaundryStatus, updateLaundryBagNumber, cancelMultipleLaundry, loadFromSupabase } = useServicesStore();
+    const { laundryRecords, updateLaundryStatus, updateLaundryBagNumber, cancelMultipleLaundry, loadFromSupabase, addLaundryRecord } = useServicesStore();
     const { guests } = useGuestsStore();
     const { data: session } = useSession();
 
     const today = todayPacificDateString();
     const [selectedDate, setSelectedDate] = useState(today);
+    const [backfillGuestId, setBackfillGuestId] = useState('');
+    const [backfillLaundryType, setBackfillLaundryType] = useState<'onsite' | 'offsite'>('onsite');
+    const [backfillSlotLabel, setBackfillSlotLabel] = useState('');
+    const [backfillBagNumber, setBackfillBagNumber] = useState('');
+    const [isAddingBackfill, setIsAddingBackfill] = useState(false);
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [showLegacySection, setShowLegacySection] = useState(true);
 
     // Check if user is admin/staff
     const userRole = (session?.user as any)?.role || '';
@@ -78,22 +99,37 @@ export function LaundrySection() {
             return laundryRecords.filter(r => pacificDateStringFrom(r.date) === selectedDate);
         }
         
-        // Current view: today's records + any past records that are not completed (pending pickup/active)
+        // Current view: only today's records
+        return laundryRecords.filter(r => pacificDateStringFrom(r.date) === today);
+    }, [laundryRecords, selectedDate, isViewingPast, today]);
+
+    // Legacy laundry: past-day records still needing pickup (not completed/cancelled)
+    const legacyLaundry = useMemo(() => {
+        if (isViewingPast) return [];
+        const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
         return laundryRecords.filter(r => {
             const recordDate = pacificDateStringFrom(r.date);
-            const isToday = recordDate === today;
-            const isPast = recordDate < today;
-
-            // Active statuses are anything NOT in this list
-            const completedStatuses = new Set(['picked_up', 'returned', 'offsite_picked_up', 'cancelled']);
-            const isActive = !completedStatuses.has(r.status);
-
-            return isToday || (isPast && isActive);
+            return recordDate < today && !completedStatuses.has(r.status);
         });
-    }, [laundryRecords, selectedDate, isViewingPast, today]);
+    }, [laundryRecords, isViewingPast, today]);
 
     const onsiteLaundry = activeLaundry.filter(r => r.laundryType === 'onsite' || !r.laundryType);
     const offsiteLaundry = activeLaundry.filter(r => r.laundryType === 'offsite');
+
+    const selectedDateLaundrySlots = useMemo(() => {
+        const selectedDateObject = new Date(`${selectedDate}T12:00:00`);
+        return generateLaundrySlots(selectedDateObject);
+    }, [selectedDate]);
+
+    const selectableGuests = useMemo(() => {
+        return (guests || [])
+            .filter((guest) => guest?.id)
+            .sort((firstGuest, secondGuest) => {
+                const firstName = (firstGuest.preferredName || firstGuest.name || `${firstGuest.firstName || ''} ${firstGuest.lastName || ''}`).toString();
+                const secondName = (secondGuest.preferredName || secondGuest.name || `${secondGuest.firstName || ''} ${secondGuest.lastName || ''}`).toString();
+                return firstName.localeCompare(secondName);
+            });
+    }, [guests]);
 
     // Calculate pending on-site laundry for End Service Day (only 'waiting' status, only for today)
     const todaysRecords = laundryRecords.filter(r => pacificDateStringFrom(r.date) === today);
@@ -114,9 +150,76 @@ export function LaundrySection() {
         }
     };
 
-    // Drag and drop state
-    const [draggedItem, setDraggedItem] = useState<any>(null);
-    const draggedItemRef = useRef<any>(null);
+    const handleAddLaundryRecord = useCallback(async () => {
+        if (!backfillGuestId) {
+            toast.error('Please select a guest');
+            return;
+        }
+
+        setIsAddingBackfill(true);
+        try {
+            await addLaundryRecord(
+                backfillGuestId,
+                backfillLaundryType,
+                backfillLaundryType === 'onsite' ? backfillSlotLabel : undefined,
+                backfillBagNumber,
+                selectedDate
+            );
+            toast.success(`Laundry record added for ${selectedDate}`);
+            setBackfillGuestId('');
+            setBackfillSlotLabel('');
+            setBackfillBagNumber('');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to add laundry record');
+        } finally {
+            setIsAddingBackfill(false);
+        }
+    }, [addLaundryRecord, backfillBagNumber, backfillGuestId, backfillLaundryType, backfillSlotLabel, selectedDate]);
+
+    const handleAddCompletedLaundryRecord = useCallback(async () => {
+        if (!backfillGuestId) {
+            toast.error('Please select a guest');
+            return;
+        }
+
+        const completedStatus = backfillLaundryType === 'offsite' ? 'returned' : 'done';
+
+        setIsAddingBackfill(true);
+        try {
+            await addLaundryRecord(
+                backfillGuestId,
+                backfillLaundryType,
+                backfillLaundryType === 'onsite' ? backfillSlotLabel : undefined,
+                backfillBagNumber,
+                selectedDate,
+                completedStatus
+            );
+            toast.success(`Completed laundry added for ${selectedDate}`);
+            setBackfillGuestId('');
+            setBackfillSlotLabel('');
+            setBackfillBagNumber('');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to add completed laundry');
+        } finally {
+            setIsAddingBackfill(false);
+        }
+    }, [addLaundryRecord, backfillBagNumber, backfillGuestId, backfillLaundryType, backfillSlotLabel, selectedDate]);
+
+    // Drag and drop state (using @dnd-kit)
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const activeRecord = useMemo(
+        () => activeLaundry.find(r => r.id === activeId) || null,
+        [activeLaundry, activeId]
+    );
+
+    // Configure sensors with activation constraints to avoid accidental drags
+    const pointerSensor = useSensor(PointerSensor, {
+        activationConstraint: { distance: 8 },
+    });
+    const touchSensor = useSensor(TouchSensor, {
+        activationConstraint: { delay: 200, tolerance: 5 },
+    });
+    const sensors = useSensors(pointerSensor, touchSensor);
 
     // View mode state
     const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
@@ -179,39 +282,25 @@ export function LaundrySection() {
         }
     }, [requiresBagPrompt, updateLaundryBagNumber, updateLaundryStatus, isViewingPast]);
 
-    // Drag handlers - disabled when viewing historical data
-    const handleDragStart = useCallback((e: React.DragEvent, record: any) => {
-        if (isViewingPast) {
-            e.preventDefault();
-            return;
-        }
-        draggedItemRef.current = record;
-        setDraggedItem(record);
-        e.dataTransfer.effectAllowed = 'move';
-        if (typeof e.dataTransfer.setDragImage === 'function') {
-            e.dataTransfer.setDragImage(e.currentTarget as Element, 0, 0);
-        }
+    // @dnd-kit drag handlers
+    const handleDragStart = useCallback((event: DragStartEvent) => {
+        if (isViewingPast) return;
+        setActiveId(event.active.id as string);
     }, [isViewingPast]);
 
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-    }, []);
+    const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveId(null);
 
-    const handleDrop = useCallback(async (e: React.DragEvent, newStatus: string) => {
-        e.preventDefault();
-        const item = draggedItemRef.current;
-        if (item && item.status !== newStatus) {
-            await handleStatusChange(item, newStatus);
+        if (!over) return;
+
+        const draggedRecord = activeLaundry.find(r => r.id === active.id);
+        const newStatus = over.id as string;
+
+        if (draggedRecord && draggedRecord.status !== newStatus) {
+            await handleStatusChange(draggedRecord, newStatus);
         }
-        draggedItemRef.current = null;
-        setDraggedItem(null);
-    }, [handleStatusChange]);
-
-    const handleDragEnd = useCallback(() => {
-        draggedItemRef.current = null;
-        setDraggedItem(null);
-    }, []);
+    }, [activeLaundry, handleStatusChange]);
 
     // Get guest name details
     const getGuestNameDetails = useCallback((guestId: string) => {
@@ -233,7 +322,7 @@ export function LaundrySection() {
                         <p className="text-sm font-bold text-amber-800">Viewing Historical Data</p>
                         <p className="text-xs text-amber-600">
                             You are viewing laundry records from {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}. 
-                            Actions are disabled in history view.
+                            Status updates are disabled in history view.
                         </p>
                     </div>
                 </div>
@@ -249,6 +338,71 @@ export function LaundrySection() {
                     onEndLaundryDay={handleEndLaundryDay}
                     isAdmin={isAdmin}
                 />
+            )}
+
+            {/* Legacy Laundry Pickup Section */}
+            {!isViewingPast && legacyLaundry.length > 0 && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl overflow-hidden" data-testid="legacy-laundry-section">
+                    <button
+                        type="button"
+                        onClick={() => setShowLegacySection(!showLegacySection)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-100/50 transition-colors"
+                        aria-expanded={showLegacySection}
+                    >
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle size={18} className="text-amber-600" />
+                            <div className="text-left">
+                                <p className="text-sm font-bold text-amber-800">
+                                    Previous Day Laundry — Pending Pickup ({legacyLaundry.length})
+                                </p>
+                                <p className="text-xs text-amber-600">
+                                    These bookings are from previous days and still need to be picked up. They do not block today&apos;s slots.
+                                </p>
+                            </div>
+                        </div>
+                        <ChevronDown size={16} className={cn("text-amber-500 transition-transform", showLegacySection && "rotate-180")} />
+                    </button>
+                    {showLegacySection && (
+                        <div className="px-4 pb-4 border-t border-amber-200">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-3">
+                                {legacyLaundry.map((record) => {
+                                    const { primaryName, legalName, hasPreferred } = getGuestNameDetails(record.guestId);
+                                    const recordDateStr = new Date(record.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                    const isOnsite = record.laundryType === 'onsite' || !record.laundryType;
+                                    const statusLabel = STATUS_COLUMNS.find(c => c.id === record.status)?.title
+                                        || OFFSITE_STATUS_COLUMNS.find(c => c.id === record.status)?.title
+                                        || record.status;
+                                    return (
+                                        <div key={record.id} className="bg-white rounded-lg border border-amber-200 shadow-sm p-3">
+                                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                <span className="font-bold text-xs text-gray-900 truncate" title={hasPreferred ? `${primaryName} (${legalName})` : legalName}>
+                                                    {primaryName}
+                                                </span>
+                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 whitespace-nowrap">
+                                                    {statusLabel}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 space-y-0.5">
+                                                <p>From: {recordDateStr}</p>
+                                                {record.bagNumber && <p className="text-purple-600">Bag #{record.bagNumber}</p>}
+                                                <p>{isOnsite ? 'On-site' : 'Off-site'}{record.time ? ` • ${record.time}` : ''}</p>
+                                            </div>
+                                            <div className="flex gap-1.5 mt-2">
+                                                <button
+                                                    onClick={() => handleStatusChange(record, isOnsite ? 'picked_up' : 'offsite_picked_up')}
+                                                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-600 text-white rounded text-[10px] font-bold hover:bg-emerald-700 transition-colors"
+                                                >
+                                                    <CheckCircle size={12} />
+                                                    Mark Picked Up
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* On-site Laundry Kanban */}
@@ -267,7 +421,7 @@ export function LaundrySection() {
                                 {viewMode === 'list' ? 'Laundry Overview' : 'On-site Laundry - Kanban Board'}
                             </h2>
                             <p className="text-sm text-gray-500 font-medium">
-                                {isViewingPast ? 'Historical view - read only' : 'Drag and drop cards between columns to update status'}
+                                {isViewingPast ? 'Historical view - status updates disabled' : 'Drag and drop cards between columns to update status'}
                             </p>
                         </div>
                     </div>
@@ -310,23 +464,28 @@ export function LaundrySection() {
                 </div>
 
                 {viewMode === 'list' ? (
-                    <CompactLaundryList />
+                    <CompactLaundryList readOnly={isViewingPast} />
                 ) : (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                    >
                     <div className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 scrollbar-hide">
                         {STATUS_COLUMNS.map((column) => {
                             const columnRecords = onsiteLaundry.filter(r => r.status === column.id);
                             const Icon = column.icon;
 
                             return (
-                                <div
+                                <DroppableColumn
                                     key={column.id}
-                                    onDragOver={handleDragOver}
-                                    onDrop={(e) => handleDrop(e, column.id)}
+                                    columnId={column.id}
                                     className={cn(
                                         "flex-shrink-0 w-56 lg:flex-1 lg:min-w-[180px] rounded-xl border-2 p-4 min-h-[400px] flex flex-col transition-colors",
                                         column.bg,
                                         column.border,
-                                        draggedItem && draggedItem.status !== column.id && "border-opacity-75"
+                                        activeId && activeRecord?.status !== column.id && "ring-2 ring-offset-2 ring-blue-200"
                                     )}
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -345,13 +504,11 @@ export function LaundrySection() {
                                     <div className="space-y-3 flex-1">
                                         <AnimatePresence mode="popLayout">
                                             {columnRecords.map((record) => (
-                                                <LaundryCard
+                                                <DraggableLaundryCard
                                                     key={record.id}
                                                     record={record}
                                                     guestDetails={getGuestNameDetails(record.guestId)}
-                                                    isDragging={draggedItem?.id === record.id}
-                                                    onDragStart={(e) => handleDragStart(e, record)}
-                                                    onDragEnd={handleDragEnd}
+                                                    isDragging={activeId === record.id}
                                                     onStatusChange={(newStatus) => handleStatusChange(record, newStatus)}
                                                     columns={STATUS_COLUMNS}
                                                     readOnly={isViewingPast}
@@ -366,13 +523,135 @@ export function LaundrySection() {
                                             )}
                                         </AnimatePresence>
                                     </div>
-                                </div>
+                                </DroppableColumn>
                             );
                         })}
 
                     </div>
+                    <DragOverlay>
+                        {activeRecord ? (
+                            <div className="bg-white rounded-lg border-2 border-blue-400 shadow-2xl p-3 opacity-90 w-56 rotate-2">
+                                <div className="font-medium text-xs text-gray-900">
+                                    {getGuestNameDetails(activeRecord.guestId).primaryName}
+                                </div>
+                                {activeRecord.bagNumber && (
+                                    <div className="text-[10px] text-purple-600 mt-1">Bag #{activeRecord.bagNumber}</div>
+                                )}
+                            </div>
+                        ) : null}
+                    </DragOverlay>
+                    </DndContext>
                 )}
             </div>
+
+            {isAdmin && (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => setShowAddForm(!showAddForm)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                        aria-expanded={showAddForm}
+                    >
+                        <span className="flex items-center gap-2">
+                            <WashingMachine size={16} className="text-purple-600" />
+                            Add Laundry Record
+                            <span className="text-[11px] font-normal text-gray-400">
+                                (saves to {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                            </span>
+                        </span>
+                        <ChevronDown size={16} className={cn("text-gray-400 transition-transform", showAddForm && "rotate-180")} />
+                    </button>
+                    {showAddForm && (
+                        <div className="px-4 pb-4 border-t border-gray-100">
+                            <div className="flex flex-col xl:flex-row xl:items-end gap-3 pt-3">
+                                <div className="flex-1">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Add Individual Laundry Record</p>
+                                    <select
+                                        value={backfillGuestId}
+                                        onChange={(event) => setBackfillGuestId(event.target.value)}
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                    >
+                                        <option value="">Select guest</option>
+                                        {selectableGuests.map((guest) => {
+                                            const displayName = guest.preferredName || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest';
+                                            return (
+                                                <option key={guest.id} value={guest.id}>
+                                                    {displayName}
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                </div>
+                                <div className="w-full xl:w-40">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Type</p>
+                                    <select
+                                        value={backfillLaundryType}
+                                        onChange={(event) => {
+                                            const laundryType = event.target.value as 'onsite' | 'offsite';
+                                            setBackfillLaundryType(laundryType);
+                                            if (laundryType === 'offsite') setBackfillSlotLabel('');
+                                        }}
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                    >
+                                        <option value="onsite">On-site</option>
+                                        <option value="offsite">Off-site</option>
+                                    </select>
+                                </div>
+                                {backfillLaundryType === 'onsite' && (
+                                    <div className="w-full xl:w-52">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Slot</p>
+                                        <select
+                                            value={backfillSlotLabel}
+                                            onChange={(event) => setBackfillSlotLabel(event.target.value)}
+                                            className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                        >
+                                            <option value="">Select slot</option>
+                                            {selectedDateLaundrySlots.map((slotLabel) => (
+                                                <option key={slotLabel} value={slotLabel}>{slotLabel}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="w-full xl:w-44">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">Bag # (Optional)</p>
+                                    <input
+                                        value={backfillBagNumber}
+                                        onChange={(event) => setBackfillBagNumber(event.target.value)}
+                                        placeholder="Bag number"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 bg-white text-sm"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleAddLaundryRecord}
+                                        disabled={!backfillGuestId || isAddingBackfill || (backfillLaundryType === 'onsite' && !backfillSlotLabel)}
+                                        className={cn(
+                                            "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
+                                            !backfillGuestId || isAddingBackfill || (backfillLaundryType === 'onsite' && !backfillSlotLabel)
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                        )}
+                                    >
+                                        {isAddingBackfill ? 'Saving...' : 'Add Laundry'}
+                                    </button>
+                                    <button
+                                        onClick={handleAddCompletedLaundryRecord}
+                                        disabled={!backfillGuestId || isAddingBackfill || (backfillLaundryType === 'onsite' && !backfillSlotLabel)}
+                                        className={cn(
+                                            "px-4 py-2.5 rounded-lg text-sm font-bold transition-colors",
+                                            !backfillGuestId || isAddingBackfill || (backfillLaundryType === 'onsite' && !backfillSlotLabel)
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                        )}
+                                    >
+                                        Add Completed
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Off-site Laundry Kanban - only show if there are off-site records */}
             {offsiteLaundry.length > 0 && (
@@ -389,6 +668,12 @@ export function LaundrySection() {
                         </span>
                     </div>
 
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                    >
                     <div className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 scrollbar-hide">
                         {OFFSITE_STATUS_COLUMNS.map((column) => {
                             // For pending column, also include 'waiting' status for backwards compatibility
@@ -400,15 +685,14 @@ export function LaundrySection() {
                             const Icon = column.icon;
 
                             return (
-                                <div
+                                <DroppableColumn
                                     key={column.id}
-                                    onDragOver={handleDragOver}
-                                    onDrop={(e) => handleDrop(e, column.id)}
+                                    columnId={column.id}
                                     className={cn(
                                         "flex-shrink-0 w-56 lg:flex-1 lg:min-w-[200px] rounded-xl border-2 p-4 min-h-[400px] flex flex-col transition-colors",
                                         column.bg,
                                         column.border,
-                                        draggedItem && draggedItem.status !== column.id && "border-opacity-75"
+                                        activeId && activeRecord?.status !== column.id && "ring-2 ring-offset-2 ring-blue-200"
                                     )}
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -426,13 +710,11 @@ export function LaundrySection() {
                                     <div className="space-y-3 flex-1">
                                         <AnimatePresence mode="popLayout">
                                             {columnRecords.map((record) => (
-                                                <LaundryCard
+                                                <DraggableLaundryCard
                                                     key={record.id}
                                                     record={record}
                                                     guestDetails={getGuestNameDetails(record.guestId)}
-                                                    isDragging={draggedItem?.id === record.id}
-                                                    onDragStart={(e) => handleDragStart(e, record)}
-                                                    onDragEnd={handleDragEnd}
+                                                    isDragging={activeId === record.id}
                                                     onStatusChange={(newStatus) => handleStatusChange(record, newStatus)}
                                                     columns={OFFSITE_STATUS_COLUMNS}
                                                     isOffsite
@@ -448,10 +730,23 @@ export function LaundrySection() {
                                             )}
                                         </AnimatePresence>
                                     </div>
-                                </div>
+                                </DroppableColumn>
                             );
                         })}
                     </div>
+                    <DragOverlay>
+                        {activeRecord ? (
+                            <div className="bg-white rounded-lg border-2 border-blue-400 shadow-2xl p-3 opacity-90 w-56 rotate-2">
+                                <div className="font-medium text-xs text-gray-900">
+                                    {getGuestNameDetails(activeRecord.guestId).primaryName}
+                                </div>
+                                {activeRecord.bagNumber && (
+                                    <div className="text-[10px] text-purple-600 mt-1">Bag #{activeRecord.bagNumber}</div>
+                                )}
+                            </div>
+                        ) : null}
+                    </DragOverlay>
+                    </DndContext>
                 </div>
             )}
 
@@ -464,19 +759,68 @@ export function LaundrySection() {
     );
 }
 
-interface LaundryCardProps {
+/** @dnd-kit droppable column wrapper */
+function DroppableColumn({ columnId, children, className }: { columnId: string; children: React.ReactNode; className?: string }) {
+    const { isOver, setNodeRef } = useDroppable({ id: columnId });
+    return (
+        <div
+            ref={setNodeRef}
+            className={cn(className, isOver && 'ring-2 ring-blue-400 bg-blue-50/40')}
+        >
+            {children}
+        </div>
+    );
+}
+
+/** @dnd-kit draggable wrapper for LaundryCard */
+interface DraggableLaundryCardProps {
     record: any;
     guestDetails: { guest: any; legalName: string; preferredName: string; hasPreferred: boolean; primaryName: string };
     isDragging: boolean;
-    onDragStart: (e: React.DragEvent) => void;
-    onDragEnd: () => void;
     onStatusChange: (newStatus: string) => void;
     columns: typeof STATUS_COLUMNS;
     isOffsite?: boolean;
     readOnly?: boolean;
 }
 
-function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd, onStatusChange, columns, isOffsite = false, readOnly = false }: LaundryCardProps) {
+function DraggableLaundryCard({ record, guestDetails, isDragging, onStatusChange, columns, isOffsite = false, readOnly = false }: DraggableLaundryCardProps) {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+        id: record.id,
+        disabled: readOnly,
+    });
+
+    const style = transform
+        ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+        : undefined;
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes}>
+            <LaundryCard
+                record={record}
+                guestDetails={guestDetails}
+                isDragging={isDragging}
+                dragListeners={listeners}
+                onStatusChange={onStatusChange}
+                columns={columns}
+                isOffsite={isOffsite}
+                readOnly={readOnly}
+            />
+        </div>
+    );
+}
+
+interface LaundryCardProps {
+    record: any;
+    guestDetails: { guest: any; legalName: string; preferredName: string; hasPreferred: boolean; primaryName: string };
+    isDragging: boolean;
+    dragListeners?: Record<string, any>;
+    onStatusChange: (newStatus: string) => void;
+    columns: typeof STATUS_COLUMNS;
+    isOffsite?: boolean;
+    readOnly?: boolean;
+}
+
+function LaundryCard({ record, guestDetails, isDragging, dragListeners, onStatusChange, columns, isOffsite = false, readOnly = false }: LaundryCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isEditingBag, setIsEditingBag] = useState(false);
     const [bagValue, setBagValue] = useState(record.bagNumber || '');
@@ -497,24 +841,28 @@ function LaundryCard({ record, guestDetails, isDragging, onDragStart, onDragEnd,
 
     return (
         <div
-            draggable={!readOnly}
-            onDragStart={readOnly ? undefined : onDragStart}
-            onDragEnd={readOnly ? undefined : onDragEnd}
-            style={{ willChange: isDragging ? 'transform, opacity' : 'auto' }}
+            {...(!readOnly && dragListeners ? dragListeners : {})}
             className={cn(
                 "bg-white rounded-lg border-2 shadow-sm p-3 transition-all hover:shadow-md",
-                readOnly ? "cursor-default" : "cursor-move",
+                readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing",
                 isDragging && "opacity-50 scale-105",
                 isCompleted ? "border-emerald-200 hover:border-emerald-300" : "border-gray-200 hover:border-gray-300"
             )}
         >
             <motion.div
-                layout
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
             >
                 <div className="flex items-center justify-between gap-1.5 mb-2 min-h-[24px]">
+                    {!readOnly && (
+                        <div
+                            className="flex-shrink-0 text-gray-300 hover:text-gray-500"
+                            aria-label="Drag to reorder"
+                        >
+                            <GripVertical size={14} />
+                        </div>
+                    )}
                     <div className="flex-1 min-w-0">
                         <div className="font-medium text-xs text-gray-900 leading-tight break-words line-clamp-2" title={guestDetails.hasPreferred ? `${guestDetails.preferredName} (${guestDetails.legalName})` : guestDetails.legalName}>
                             {guestDetails.primaryName}

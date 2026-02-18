@@ -12,6 +12,7 @@ import {
     Heart
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
@@ -25,6 +26,7 @@ import { MealsSection } from '@/components/services/MealsSection';
 import { DonationsSection } from '@/components/services/DonationsSection';
 import { pacificDateStringFrom } from '@/lib/utils/date';
 import { cn } from '@/lib/utils/cn';
+import { useShallow } from 'zustand/react/shallow';
 
 const TABS = [
     { id: 'overview', label: 'Overview', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -41,6 +43,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 export default function ServicesPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
+    const prefersReducedMotion = useReducedMotion();
 
     // Use URL as source of truth for active tab
     const activeTab = searchParams.get('tab') || 'overview';
@@ -51,71 +54,101 @@ export default function ServicesPage() {
         router.push(`?${params.toString()}`, { scroll: false });
     };
 
-    const { loadFromSupabase, showerRecords, laundryRecords, bicycleRecords } = useServicesStore();
-    const { loadFromSupabase: loadGuests, guests } = useGuestsStore();
-    const { loadFromSupabase: loadMeals, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords } = useMealsStore();
-    const { loadFromSupabase: loadDonations } = useDonationsStore();
+    const { loadFromSupabase: loadServices, showerRecords, laundryRecords, bicycleRecords } = useServicesStore(
+        useShallow((s) => ({
+            loadFromSupabase: s.loadFromSupabase,
+            showerRecords: s.showerRecords,
+            laundryRecords: s.laundryRecords,
+            bicycleRecords: s.bicycleRecords,
+        }))
+    );
+    const { loadFromSupabase: loadGuests, guests } = useGuestsStore(
+        useShallow((s) => ({ loadFromSupabase: s.loadFromSupabase, guests: s.guests }))
+    );
+    const { loadFromSupabase: loadMeals, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, dayWorkerMealRecords, shelterMealRecords } = useMealsStore(
+        useShallow((s) => ({
+            loadFromSupabase: s.loadFromSupabase,
+            mealRecords: s.mealRecords,
+            rvMealRecords: s.rvMealRecords,
+            extraMealRecords: s.extraMealRecords,
+            unitedEffortMealRecords: s.unitedEffortMealRecords,
+            dayWorkerMealRecords: s.dayWorkerMealRecords,
+            shelterMealRecords: s.shelterMealRecords,
+        }))
+    );
+    const loadDonations = useDonationsStore((s) => s.loadFromSupabase);
 
     useEffect(() => {
-        loadFromSupabase();
+        loadServices();
         loadGuests();
         loadMeals();
         loadDonations();
-    }, [loadFromSupabase, loadGuests, loadMeals, loadDonations]);
+    }, [loadServices, loadGuests, loadMeals, loadDonations]);
 
-    const today = pacificDateStringFrom(new Date().toISOString());
+    const today = useMemo(() => pacificDateStringFrom(new Date().toISOString()), []);
 
     // Get the start of this week (Sunday)
-    const getStartOfWeek = () => {
+    const startOfWeek = useMemo(() => {
         const now = new Date();
         const day = now.getDay();
         const diff = now.getDate() - day;
-        const sunday = new Date(now.setDate(diff));
+        const sunday = new Date(now);
+        sunday.setDate(diff);
         return pacificDateStringFrom(sunday.toISOString());
-    };
-    const startOfWeek = getStartOfWeek();
+    }, []);
 
     // Compute metrics for the overview
     const metrics = useMemo(() => {
+        const dateKeyOf = (r: any) => r?.dateKey || pacificDateStringFrom(r.date);
+
+        const sumCountForToday = (records: any[]) =>
+            records.filter(r => dateKeyOf(r) === today).reduce((sum, r) => sum + (r.count || 0), 0);
+
+        // Meals served today: all types EXCLUDING lunch bags
         const mealsToday = (
-            mealRecords.filter(r => pacificDateStringFrom(r.date) === today).length +
-            rvMealRecords.filter(r => pacificDateStringFrom(r.date) === today).length +
-            extraMealRecords.filter(r => pacificDateStringFrom(r.date) === today).length +
-            unitedEffortMealRecords.filter(r => pacificDateStringFrom(r.date) === today).length
+            sumCountForToday(mealRecords) +
+            sumCountForToday(rvMealRecords) +
+            sumCountForToday(extraMealRecords) +
+            sumCountForToday(unitedEffortMealRecords) +
+            sumCountForToday(dayWorkerMealRecords) +
+            sumCountForToday(shelterMealRecords)
         );
         
         const uniqueGuestsToday = new Set([
-            ...mealRecords.filter(r => pacificDateStringFrom(r.date) === today).map(r => r.guestId),
-            ...showerRecords.filter(r => pacificDateStringFrom(r.date) === today).map(r => r.guestId),
-            ...laundryRecords.filter(r => pacificDateStringFrom(r.date) === today).map(r => r.guestId),
-            ...bicycleRecords.filter(r => pacificDateStringFrom(r.date) === today).map(r => r.guestId),
+            ...mealRecords.filter(r => dateKeyOf(r) === today).map(r => r.guestId),
+            ...showerRecords.filter(r => dateKeyOf(r) === today).map(r => r.guestId),
+            ...laundryRecords.filter(r => dateKeyOf(r) === today).map(r => r.guestId),
+            ...bicycleRecords.filter(r => dateKeyOf(r) === today).map(r => r.guestId),
         ]).size;
 
-        // Bicycle metrics
-        const bicyclesPending = bicycleRecords.filter(r => r.status !== 'done').length;
+        // Bicycle metrics - only show today's pending repairs
+        const bicyclesPending = bicycleRecords.filter(r => dateKeyOf(r) === today && r.status === 'pending').length;
         const bicyclesCompletedThisWeek = bicycleRecords.filter(r => 
-            pacificDateStringFrom(r.date) >= startOfWeek && r.status === 'done'
+            dateKeyOf(r) >= startOfWeek && r.status === 'done'
         ).length;
+
+        // Laundry completed statuses
+        const laundryCompletedStatuses = ['done', 'picked_up', 'returned', 'offsite_picked_up'];
 
         return {
             totalGuests: guests.length,
             housingStatusSummary: `${guests.filter(g => g.housingStatus === 'Housed').length} housed · ${guests.filter(g => g.housingStatus === 'Unsheltered').length} unsheltered`,
             mealsToday,
             uniqueGuestsToday,
-            showersDone: showerRecords.filter(r => pacificDateStringFrom(r.date) === today && r.status === 'done').length,
-            showersActive: showerRecords.filter(r => pacificDateStringFrom(r.date) === today && (r.status === 'booked' || r.status === 'awaiting')).length,
-            showerWaitlist: showerRecords.filter(r => pacificDateStringFrom(r.date) === today && r.status === 'waitlisted').length,
-            laundryTotal: laundryRecords.filter(r => pacificDateStringFrom(r.date) === today).length,
-            laundryActive: laundryRecords.filter(r => pacificDateStringFrom(r.date) === today && ['waiting', 'washer', 'dryer'].includes(r.status)).length,
-            laundryDone: laundryRecords.filter(r => pacificDateStringFrom(r.date) === today && r.status === 'done').length,
+            showersDone: showerRecords.filter(r => dateKeyOf(r) === today && r.status === 'done').length,
+            showersActive: showerRecords.filter(r => dateKeyOf(r) === today && (r.status === 'booked' || r.status === 'awaiting')).length,
+            showerWaitlist: showerRecords.filter(r => dateKeyOf(r) === today && r.status === 'waitlisted').length,
+            laundryTotal: laundryRecords.filter(r => dateKeyOf(r) === today && laundryCompletedStatuses.includes(r.status)).length,
+            laundryActive: laundryRecords.filter(r => dateKeyOf(r) === today && ['waiting', 'washer', 'dryer'].includes(r.status)).length,
+            laundryDone: laundryRecords.filter(r => dateKeyOf(r) === today && r.status === 'done').length,
             bicyclesPending,
             bicyclesCompletedThisWeek,
             timelineCount: (
-                showerRecords.filter(r => pacificDateStringFrom(r.date) === today).length +
-                laundryRecords.filter(r => pacificDateStringFrom(r.date) === today).length
+                showerRecords.filter(r => dateKeyOf(r) === today).length +
+                laundryRecords.filter(r => dateKeyOf(r) === today).length
             )
         };
-    }, [guests, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, showerRecords, laundryRecords, bicycleRecords, today, startOfWeek]);
+    }, [guests, mealRecords, rvMealRecords, extraMealRecords, unitedEffortMealRecords, dayWorkerMealRecords, shelterMealRecords, showerRecords, laundryRecords, bicycleRecords, today, startOfWeek]);
 
     const renderContent = () => {
         switch (activeTab) {
@@ -141,7 +174,7 @@ export default function ServicesPage() {
                         </div>
                         <span className="text-xs font-black uppercase tracking-widest text-emerald-600">Service Center</span>
                     </div>
-                    <h1 className="text-4xl font-black text-gray-900 tracking-tight">Management</h1>
+                    <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">Management</h1>
                     <p className="text-gray-500 font-medium mt-2 max-w-xl">
                         Coordinate and monitor all daily services including showers, laundry, and bicycle repairs from a centralized hub.
                     </p>
@@ -199,9 +232,9 @@ export default function ServicesPage() {
             {/* Main Content Area */}
             <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
             >
                 {renderContent()}
             </motion.div>

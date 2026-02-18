@@ -19,6 +19,9 @@ const mockGuestsLoadFromSupabase = vi.fn();
 const mockGuestsLoadWarnings = vi.fn();
 const mockGuestsLoadProxies = vi.fn();
 const mockRemindersLoadFromSupabase = vi.fn();
+const mockBlockedSlotsFetch = vi.fn();
+const mockDailyNotesLoadFromSupabase = vi.fn();
+const mockDonationsLoadFromSupabase = vi.fn();
 
 vi.mock('@/stores/useServicesStore', () => ({
     useServicesStore: (selector: any) => {
@@ -70,6 +73,39 @@ vi.mock('@/stores/useRemindersStore', () => ({
     },
 }));
 
+vi.mock('@/stores/useBlockedSlotsStore', () => ({
+    useBlockedSlotsStore: (selector: any) => {
+        if (typeof selector === 'function') {
+            return selector({
+                fetchBlockedSlots: mockBlockedSlotsFetch,
+            });
+        }
+        return { fetchBlockedSlots: mockBlockedSlotsFetch };
+    },
+}));
+
+vi.mock('@/stores/useDailyNotesStore', () => ({
+    useDailyNotesStore: (selector: any) => {
+        if (typeof selector === 'function') {
+            return selector({
+                loadFromSupabase: mockDailyNotesLoadFromSupabase,
+            });
+        }
+        return { loadFromSupabase: mockDailyNotesLoadFromSupabase };
+    },
+}));
+
+vi.mock('@/stores/useDonationsStore', () => ({
+    useDonationsStore: (selector: any) => {
+        if (typeof selector === 'function') {
+            return selector({
+                loadFromSupabase: mockDonationsLoadFromSupabase,
+            });
+        }
+        return { loadFromSupabase: mockDonationsLoadFromSupabase };
+    },
+}));
+
 describe('useRealtimeSync', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -103,15 +139,27 @@ describe('useRealtimeSync', () => {
             expect.objectContaining({ table: 'guest_warnings' })
         );
         expect(mockSubscribeToTable).toHaveBeenCalledWith(
+            expect.objectContaining({ table: 'guest_proxies' })
+        );
+        expect(mockSubscribeToTable).toHaveBeenCalledWith(
             expect.objectContaining({ table: 'guest_reminders' })
+        );
+        expect(mockSubscribeToTable).toHaveBeenCalledWith(
+            expect.objectContaining({ table: 'blocked_slots' })
+        );
+        expect(mockSubscribeToTable).toHaveBeenCalledWith(
+            expect.objectContaining({ table: 'daily_notes' })
+        );
+        expect(mockSubscribeToTable).toHaveBeenCalledWith(
+            expect.objectContaining({ table: 'donations' })
         );
     });
 
-    it('subscribes to 7 tables', () => {
+    it('subscribes to 11 tables', () => {
         renderHook(() => useRealtimeSync());
         
-        // 7 tables: showers, laundry, meals, bicycles, guests, warnings, reminders
-        expect(mockSubscribeToTable).toHaveBeenCalledTimes(7);
+        // 11 tables: showers, laundry, meals, bicycles, guests, warnings, proxies, reminders, blocked_slots, daily_notes, donations
+        expect(mockSubscribeToTable).toHaveBeenCalledTimes(11);
     });
 
     it('cleans up subscriptions on unmount', () => {
@@ -172,6 +220,67 @@ describe('useRealtimeSync', () => {
 
         // Should only call loadFromSupabase once due to debouncing
         expect(mockMealsLoadFromSupabase).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes services when laundry booking is created on another device', async () => {
+        let capturedOnChange: (() => void) | undefined;
+        mockSubscribeToTable.mockImplementation((options: { table: string; onChange?: () => void }) => {
+            if (options.table === 'laundry_bookings') {
+                capturedOnChange = options.onChange;
+            }
+            return vi.fn();
+        });
+
+        renderHook(() => useRealtimeSync());
+
+        // Simulate a laundry booking insert event from another device
+        capturedOnChange?.();
+
+        await act(async () => {
+            vi.advanceTimersByTime(600);
+        });
+
+        expect(mockServicesLoadFromSupabase).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes blocked slots when a slot is blocked/unblocked', async () => {
+        let capturedOnChange: (() => void) | undefined;
+        mockSubscribeToTable.mockImplementation((options: { table: string; onChange?: () => void }) => {
+            if (options.table === 'blocked_slots') {
+                capturedOnChange = options.onChange;
+            }
+            return vi.fn();
+        });
+
+        renderHook(() => useRealtimeSync());
+
+        capturedOnChange?.();
+
+        await act(async () => {
+            vi.advanceTimersByTime(600);
+        });
+
+        expect(mockBlockedSlotsFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes proxies when guest_proxies change', async () => {
+        let capturedOnChange: (() => void) | undefined;
+        mockSubscribeToTable.mockImplementation((options: { table: string; onChange?: () => void }) => {
+            if (options.table === 'guest_proxies') {
+                capturedOnChange = options.onChange;
+            }
+            return vi.fn();
+        });
+
+        renderHook(() => useRealtimeSync());
+
+        capturedOnChange?.();
+
+        await act(async () => {
+            vi.advanceTimersByTime(600);
+        });
+
+        expect(mockGuestsLoadProxies).toHaveBeenCalledTimes(1);
     });
 });
 

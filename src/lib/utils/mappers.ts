@@ -8,6 +8,7 @@ import {
   extractLaundrySlotStart,
   computeIsGuestBanned,
 } from "./normalizers";
+import { pacificDateStringFrom } from './date';
 
 // Type for shower status in database
 type ShowerDbStatus = 'booked' | 'waitlisted' | 'done' | 'cancelled' | 'no_show' | null | undefined;
@@ -115,16 +116,6 @@ interface DonationRow {
   temperature?: string | null;
   donor?: string;
   donated_at: string;
-  date_key?: string;
-  created_at?: string;
-}
-
-interface LaPlazaDonationRow {
-  id: string;
-  category: string;
-  weight_lbs?: number | string | null;
-  notes?: string | null;
-  received_at: string;
   date_key?: string;
   created_at?: string;
 }
@@ -330,6 +321,7 @@ export const mapMealRow = (row: MealRow) => {
     : null;
 
   const picked = row.picked_up_by_guest_id || null;
+  const effectiveTimestamp = servedOnDate || recordedAt || new Date().toISOString();
   return {
     id: row.id,
     guestId: row.guest_id,
@@ -337,7 +329,8 @@ export const mapMealRow = (row: MealRow) => {
     pickedUpByGuestId: picked,
     pickedUpByProxyId: picked,
     count: row.quantity || 1,
-    date: servedOnDate || recordedAt || new Date().toISOString(),
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
     recordedAt,
     servedOn: row.served_on,
     createdAt: row.created_at,
@@ -351,16 +344,18 @@ export const mapShowerRow = (row: ShowerRow) => {
     row.scheduled_time,
   );
   const fallbackTimestamp =
+    fallbackIsoFromDateOnly(row.scheduled_for) ||
     row.updated_at ||
     row.created_at ||
-    fallbackIsoFromDateOnly(row.scheduled_for) ||
     new Date().toISOString();
+  const effectiveTimestamp = scheduledTimestamp || fallbackTimestamp;
   return {
     id: row.id,
     guestId: row.guest_id,
     time: row.scheduled_time || null,
     scheduledFor: row.scheduled_for || row.created_at || null,
-    date: scheduledTimestamp || fallbackTimestamp,
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
     status: mapShowerStatusToApp(row.status),
     createdAt: row.created_at,
     lastUpdated: row.updated_at,
@@ -374,10 +369,11 @@ export const mapLaundryRow = (row: LaundryRow) => {
     slotStart,
   );
   const fallbackTimestamp =
+    fallbackIsoFromDateOnly(row.scheduled_for) ||
     row.updated_at ||
     row.created_at ||
-    fallbackIsoFromDateOnly(row.scheduled_for) ||
     new Date().toISOString();
+  const effectiveTimestamp = scheduledTimestamp || fallbackTimestamp;
   return {
     id: row.id,
     guestId: row.guest_id,
@@ -385,41 +381,54 @@ export const mapLaundryRow = (row: LaundryRow) => {
     laundryType: row.laundry_type,
     bagNumber: row.bag_number || "",
     scheduledFor: row.scheduled_for || row.created_at || null,
-    date: scheduledTimestamp || fallbackTimestamp,
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
     status: row.status,
     createdAt: row.created_at,
     lastUpdated: row.updated_at,
   };
 };
 
-export const mapBicycleRow = (row: BicycleRow) => ({
-  id: row.id,
-  guestId: row.guest_id || undefined,
-  date: row.requested_at,
-  type: "bicycle",
-  repairType: row.repair_type || undefined,
-  repairTypes: row.repair_types || (row.repair_type ? [row.repair_type] : []),
-  completedRepairs: row.completed_repairs || [],
-  notes: row.notes || undefined,
-  status: row.status,
-  priority: row.priority || 0,
-  doneAt: row.completed_at || undefined,
-  lastUpdated: row.updated_at,
-});
+export const mapBicycleRow = (row: BicycleRow) => {
+  const effectiveTimestamp = row.requested_at || row.updated_at || new Date().toISOString();
+  return {
+    id: row.id,
+    guestId: row.guest_id || undefined,
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
+    type: "bicycle",
+    repairType: row.repair_type || undefined,
+    repairTypes: row.repair_types || (row.repair_type ? [row.repair_type] : []),
+    completedRepairs: row.completed_repairs || [],
+    notes: row.notes || undefined,
+    status: row.status,
+    priority: row.priority || 0,
+    doneAt: row.completed_at || undefined,
+    lastUpdated: row.updated_at,
+  };
+};
 
-export const mapHolidayRow = (row: HolidayRow) => ({
-  id: row.id,
-  guestId: row.guest_id,
-  date: row.served_at,
-  type: "holiday",
-});
+export const mapHolidayRow = (row: HolidayRow) => {
+  const effectiveTimestamp = row.served_at || new Date().toISOString();
+  return {
+    id: row.id,
+    guestId: row.guest_id,
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
+    type: "holiday",
+  };
+};
 
-export const mapHaircutRow = (row: HaircutRow) => ({
-  id: row.id,
-  guestId: row.guest_id,
-  date: row.served_at,
-  type: "haircut",
-});
+export const mapHaircutRow = (row: HaircutRow) => {
+  const effectiveTimestamp = row.served_at || new Date().toISOString();
+  return {
+    id: row.id,
+    guestId: row.guest_id,
+    date: effectiveTimestamp,
+    dateKey: pacificDateStringFrom(effectiveTimestamp),
+    type: "haircut",
+  };
+};
 
 export const mapItemRow = (row: ItemRow) => ({
   id: row.id,
@@ -439,18 +448,6 @@ export const mapDonationRow = (row: DonationRow) => {
     temperature: row.temperature || undefined,
     donor: row.donor || "",
     date: row.donated_at,
-    dateKey: row.date_key,
-    createdAt: row.created_at,
-  };
-};
-
-export const mapLaPlazaDonationRow = (row: LaPlazaDonationRow) => {
-  return {
-    id: row.id,
-    category: row.category,
-    weightLbs: Number(row.weight_lbs) || 0,
-    notes: row.notes || "",
-    receivedAt: row.received_at,
     dateKey: row.date_key,
     createdAt: row.created_at,
   };

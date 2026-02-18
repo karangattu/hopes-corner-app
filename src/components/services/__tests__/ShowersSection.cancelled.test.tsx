@@ -24,6 +24,8 @@ vi.mock('react-hot-toast', () => ({
 const mockLoadFromSupabase = vi.fn().mockResolvedValue(undefined);
 const mockCancelMultipleShowers = vi.fn().mockResolvedValue(true);
 const mockUpdateShowerStatus = vi.fn().mockResolvedValue(undefined);
+const mockAddShowerRecord = vi.fn().mockResolvedValue({ id: 'new-shower' });
+const mockAddShowerWaitlist = vi.fn().mockResolvedValue({ id: 'new-waitlist' });
 
 const defaultShowerRecords = [
     { id: '1', guestId: 'g1', date: '2026-01-22', time: '09:00', status: 'booked' },
@@ -43,19 +45,25 @@ const defaultGuests = [
 
 // Mock stores with shower data
 vi.mock('@/stores/useServicesStore', () => ({
-    useServicesStore: vi.fn(() => ({
-        showerRecords: defaultShowerRecords,
-        cancelMultipleShowers: mockCancelMultipleShowers,
-        loadFromSupabase: mockLoadFromSupabase,
-        deleteShowerRecord: vi.fn(),
-        updateShowerStatus: mockUpdateShowerStatus,
-    })),
+    useServicesStore: vi.fn((selector) => {
+        const state = {
+            showerRecords: defaultShowerRecords,
+            cancelMultipleShowers: mockCancelMultipleShowers,
+            addShowerRecord: mockAddShowerRecord,
+            addShowerWaitlist: mockAddShowerWaitlist,
+            loadFromSupabase: mockLoadFromSupabase,
+            deleteShowerRecord: vi.fn(),
+            updateShowerStatus: mockUpdateShowerStatus,
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useGuestsStore', () => ({
-    useGuestsStore: vi.fn(() => ({
-        guests: defaultGuests,
-    })),
+    useGuestsStore: vi.fn((selector) => {
+        const state = { guests: defaultGuests };
+        return typeof selector === 'function' ? selector(state) : state;
+    }),
 }));
 
 vi.mock('@/stores/useBlockedSlotsStore', () => ({
@@ -87,6 +95,7 @@ vi.mock('@/lib/utils/date', () => ({
 
 vi.mock('@/lib/utils/serviceSlots', () => ({
     formatSlotLabel: vi.fn((slot: string) => slot),
+    generateShowerSlots: vi.fn(() => ['09:00', '09:30', '10:00']),
 }));
 
 describe('ShowersSection Cancelled Tab', () => {
@@ -101,7 +110,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('renders the cancelled tab', () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         expect(cancelledTab).toBeDefined();
     });
 
@@ -109,27 +118,27 @@ describe('ShowersSection Cancelled Tab', () => {
         render(<ShowersSection />);
         
         // Should show count of 2 (one cancelled + one no_show)
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         expect(cancelledTab.textContent).toContain('(2)');
     });
 
     it('shows cancelled showers when cancelled tab is clicked', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
             // Should show Alice Brown (cancelled) and Charlie Davis/Chuck (no_show)
-            expect(screen.getByText('Alice Brown')).toBeDefined();
-            expect(screen.getByText('Chuck')).toBeDefined();
+            expect(screen.getAllByText('Alice Brown').length).toBeGreaterThan(0);
+            expect(screen.getAllByText('Chuck').length).toBeGreaterThan(0);
         });
     });
 
     it('cancelled tab is not selected by default', () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         // Active tab has specific styling classes
         expect(cancelledTab.className).toContain('text-gray-500');
     });
@@ -137,7 +146,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('cancelled tab becomes selected when clicked', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -148,7 +157,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('shows cancelled status badge with red styling', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -161,7 +170,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('shows no_show status badge with red styling', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -173,7 +182,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('shows REBOOK button for cancelled showers', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -185,7 +194,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('calls updateShowerStatus when REBOOK is clicked', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -201,7 +210,7 @@ describe('ShowersSection Cancelled Tab', () => {
     it('does not show COMPLETE or cancel buttons for cancelled showers', async () => {
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {
@@ -212,19 +221,24 @@ describe('ShowersSection Cancelled Tab', () => {
     it('displays empty state when no cancelled showers exist', async () => {
         // Override the mock to have no cancelled showers
         const { useServicesStore } = await import('@/stores/useServicesStore');
-        vi.mocked(useServicesStore).mockReturnValue({
-            showerRecords: [
-                { id: '1', guestId: 'g1', date: '2026-01-22', time: '09:00', status: 'booked' },
-            ],
-            cancelMultipleShowers: mockCancelMultipleShowers,
-            loadFromSupabase: mockLoadFromSupabase,
-            deleteShowerRecord: vi.fn(),
-            updateShowerStatus: mockUpdateShowerStatus,
-        } as any);
+        vi.mocked(useServicesStore).mockImplementation((selector: any) => {
+            const state = {
+                showerRecords: [
+                    { id: '1', guestId: 'g1', date: '2026-01-22', time: '09:00', status: 'booked' },
+                ],
+                cancelMultipleShowers: mockCancelMultipleShowers,
+                addShowerRecord: mockAddShowerRecord,
+                addShowerWaitlist: mockAddShowerWaitlist,
+                loadFromSupabase: mockLoadFromSupabase,
+                deleteShowerRecord: vi.fn(),
+                updateShowerStatus: mockUpdateShowerStatus,
+            };
+            return typeof selector === 'function' ? selector(state) : state;
+        });
         
         render(<ShowersSection />);
         
-        const cancelledTab = screen.getByRole('button', { name: /cancelled/i });
+        const cancelledTab = screen.getAllByRole('button', { name: /cancelled/i })[0];
         fireEvent.click(cancelledTab);
         
         await waitFor(() => {

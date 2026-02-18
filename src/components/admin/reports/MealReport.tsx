@@ -68,7 +68,7 @@ const AGE_GROUP_COLORS = {
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string; dataKey: string }>; label?: string }) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-white/95 backdrop-blur-sm p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm">
+            <div className="bg-white p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm">
                 <p className="font-bold text-gray-800 mb-2">{label}</p>
                 {payload.map((entry) => (
                     <div key={entry.name} className="flex items-center gap-2 mb-1">

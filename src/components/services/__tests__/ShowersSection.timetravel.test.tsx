@@ -3,9 +3,10 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom';
 
 // Mock next-auth session
+let mockRole = 'admin';
 vi.mock('next-auth/react', () => ({
     useSession: () => ({
-        data: { user: { role: 'admin' } },
+        data: { user: { role: mockRole } },
         status: 'authenticated',
     }),
 }));
@@ -34,24 +35,35 @@ const mockShowerRecords = [
     { id: '4', guestId: 'g4', date: '2024-01-14', status: 'cancelled', time: '10:00' },
 ];
 
+const mockAddShowerRecord = vi.fn().mockResolvedValue({ id: 'new-shower' });
+const mockAddShowerWaitlist = vi.fn().mockResolvedValue({ id: 'new-waitlist' });
+
 vi.mock('@/stores/useServicesStore', () => ({
-    useServicesStore: () => ({
-        showerRecords: mockShowerRecords,
-        cancelMultipleShowers: vi.fn(),
-        deleteShowerRecord: vi.fn(),
-        updateShowerStatus: vi.fn(),
-    }),
+    useServicesStore: (selector: any) => {
+        const state = {
+            showerRecords: mockShowerRecords,
+            cancelMultipleShowers: vi.fn(),
+            addShowerRecord: mockAddShowerRecord,
+            addShowerWaitlist: mockAddShowerWaitlist,
+            deleteShowerRecord: vi.fn(),
+            updateShowerStatus: vi.fn(),
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    },
 }));
 
 vi.mock('@/stores/useGuestsStore', () => ({
-    useGuestsStore: () => ({
-        guests: [
-            { id: 'g1', name: 'John Doe', preferredName: '' },
-            { id: 'g2', name: 'Jane Smith', preferredName: 'Janie' },
-            { id: 'g3', name: 'Bob Wilson', preferredName: '' },
-            { id: 'g4', name: 'Alice Brown', preferredName: '' },
-        ],
-    }),
+    useGuestsStore: (selector: any) => {
+        const state = {
+            guests: [
+                { id: 'g1', name: 'John Doe', preferredName: '' },
+                { id: 'g2', name: 'Jane Smith', preferredName: 'Janie' },
+                { id: 'g3', name: 'Bob Wilson', preferredName: '' },
+                { id: 'g4', name: 'Alice Brown', preferredName: '' },
+            ],
+        };
+        return typeof selector === 'function' ? selector(state) : state;
+    },
 }));
 
 // Mock child components to simplify tests
@@ -102,7 +114,38 @@ import { ShowersSection } from '../ShowersSection';
 
 describe('ShowersSection Time Travel', () => {
     beforeEach(() => {
+        mockRole = 'admin';
         vi.clearAllMocks();
+    });
+
+    it('allows staff to use historical add actions', () => {
+        mockRole = 'staff';
+        render(<ShowersSection />);
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Shower Record/ }));
+        expect(screen.getByRole('button', { name: 'Add Done' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Add Shower' })).toBeInTheDocument();
+    });
+
+    it('adds a completed shower for a historical date', async () => {
+        render(<ShowersSection />);
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('go-to-yesterday'));
+        });
+
+        // Expand the collapsed add form first
+        fireEvent.click(screen.getByRole('button', { name: /Add Shower Record/ }));
+
+        fireEvent.change(screen.getByDisplayValue('Select guest'), {
+            target: { value: 'g1' },
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add Done' }));
+
+        await waitFor(() => {
+            expect(mockAddShowerRecord).toHaveBeenCalledWith('g1', undefined, '2024-01-14', 'done');
+        });
     });
 
     describe('Date Picker Visibility', () => {

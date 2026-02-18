@@ -11,7 +11,8 @@ import {
     Bike,
     FileText,
     ClipboardList,
-    Loader2
+    Loader2,
+    Package
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
@@ -20,6 +21,7 @@ import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useDonationsStore } from '@/stores/useDonationsStore';
 import { todayPacificDateString } from '@/lib/utils/date';
+import { createClient } from '@/lib/supabase/client';
 
 // Helper to convert data to CSV and trigger download
 function exportToCSV(data: Record<string, unknown>[], filename: string) {
@@ -64,6 +66,7 @@ const EXPORT_OPTIONS = [
     { id: 'laundry', label: 'Laundry Records', icon: WashingMachine, color: 'text-purple-600', bg: 'bg-purple-50', description: 'Workflow history for all on-site and off-site laundry loads.' },
     { id: 'bicycles', label: 'Bicycle Repairs', icon: Bike, color: 'text-amber-600', bg: 'bg-amber-50', description: 'Historical bicycle repair services and outcomes.' },
     { id: 'donations', label: 'Donations Log', icon: FileText, color: 'text-rose-600', bg: 'bg-rose-50', description: 'All recorded donations including donor, item, and weight.' },
+    { id: 'supplies', label: 'Shower Supplies', icon: Package, color: 'text-teal-600', bg: 'bg-teal-50', description: 'Items distributed during showers including t-shirts, jackets, sleeping bags, and more.' },
 ];
 
 export function DataExportSection() {
@@ -209,6 +212,40 @@ export function DataExportSection() {
                     );
                     break;
 
+                case 'supplies': {
+                    const supabase = createClient();
+                    const { data: supplyData, error: supplyError } = await supabase
+                        .from('items_distributed')
+                        .select('id, guest_id, item_key, distributed_at, created_at')
+                        .order('distributed_at', { ascending: false });
+
+                    if (supplyError) throw supplyError;
+
+                    const ITEM_LABELS: Record<string, string> = {
+                        tshirt: 'T-Shirt',
+                        jacket: 'Jacket',
+                        tent: 'Tent',
+                        sleeping_bag: 'Sleeping Bag',
+                        backpack: 'Backpack',
+                        flipflops: 'Flip Flops',
+                        flip_flops: 'Flip Flops',
+                        shoes: 'Shoes',
+                        blanket: 'Blanket',
+                    };
+
+                    exportToCSV(
+                        (supplyData || []).map(r => ({
+                            Date: new Date(r.distributed_at).toLocaleDateString(),
+                            'Guest ID': r.guest_id,
+                            'Guest Name': guests.find(g => g.id === r.guest_id)?.name || 'Unknown',
+                            Item: ITEM_LABELS[r.item_key] || r.item_key.replace(/_/g, ' '),
+                            'Item Key': r.item_key,
+                        })),
+                        `hopes-corner-shower-supplies-${today}.csv`
+                    );
+                    break;
+                }
+
                 default:
                     toast.error('Unknown export type');
             }
@@ -281,7 +318,7 @@ export function DataExportSection() {
             </div>
 
             {/* Stats Bar */}
-            <div className="bg-gray-50 rounded-2xl p-6 flex flex-wrap items-center justify-center gap-8 text-center">
+            <div className="bg-gray-50 rounded-2xl p-6 flex flex-wrap items-center justify-center gap-4 md:gap-8 text-center">
                 <div>
                     <div className="text-2xl font-black text-gray-900">{guests.length.toLocaleString()}</div>
                     <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Guests</div>

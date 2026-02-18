@@ -61,14 +61,43 @@ body:
         - ✅ Read relevant existing code and follow current patterns
         - ✅ Implement complete logic (no placeholders)
         - ✅ Add/update tests for all new logic and UI changes
+        - ✅ Run Playwright component tests: `npm run test:ct`
         - ✅ Run lint: `npm run lint`
         - ✅ Run full tests: `npm test -- --run`
+        - ✅ Run production build: `npm run build`
         - ✅ Verify no regressions
         - ✅ Update documentation if applicable
-        - ✅ **Update version & changelog** in `src/lib/utils/appVersion.ts`:
-          - Bump `APP_VERSION` (use semantic versioning)
-          - Add new entry to `CHANGELOG` array with feature details (keep it minimal and non-technical)
+        - ✅ I understand this feature is not complete until `src/lib/utils/appVersion.ts` is updated by bumping `APP_VERSION` (semver) and adding a concise non-technical `CHANGELOG` entry for staff.
         - ✅ Share screenshot of new UI or feature
+        
+        ## Database Migration Requirements
+        
+        **If this feature requires database schema changes:**
+        
+        - ✅ Create migration file in `supabase/migrations/` folder (e.g., `supabase/migrations/20240209120000_add_daily_notes_table.sql`)
+        - ✅ Migration files are automatically applied via CI/CD when merged to main
+        - ✅ Follow Supabase naming convention: `YYYYMMDDHHMMSS_description.sql` (timestamp + description)
+        - ✅ Generate migrations using Supabase CLI locally: `supabase migration new description`
+        - ✅ Test migrations locally before pushing: `supabase db reset` then `supabase db push`
+        - ✅ Keep `database/schema.sql` updated as a reference (run `supabase db dump` to update)
+        
+        **Note:** The CI workflow detects changes to the `supabase/migrations/` folder and runs `supabase db push` automatically on merge to main.
+        
+        **Reference:** [Supabase Database Migrations Documentation](https://supabase.com/docs/guides/deployment/database-migrations)
+
+        ## Feature Removal / Cleanup Requirements
+
+        **If this request removes, replaces, or deprecates an existing feature:**
+
+        - ✅ Remove UI entry points (pages, tabs, nav links, buttons, modals, routes)
+        - ✅ Remove or refactor related store/actions/hooks/selectors
+        - ✅ Remove obsolete backend/API logic and related permissions/policies
+        - ✅ Remove or migrate database artifacts (tables, columns, enums, triggers, views, RLS policies) via migration files
+        - ✅ Remove dead utilities/types/constants and unused dependencies/imports
+        - ✅ Remove or update tests (unit, integration, component/e2e) for deleted behavior
+        - ✅ Verify no orphaned references remain (`grep`/TypeScript/lint should be clean)
+        - ✅ Update docs, runbooks, and user-facing guidance to reflect removal
+        - ✅ Include migration/backfill/rollback notes if data is being deleted or transformed
 
   - type: textarea
     id: additional-notes

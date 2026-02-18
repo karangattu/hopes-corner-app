@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Utensils,
@@ -27,9 +27,11 @@ import { todayPacificDateString, pacificDateStringFrom, formatTimeInPacific } fr
 import { cn } from '@/lib/utils/cn';
 import { MealServiceTimer } from '@/components/checkin/MealServiceTimer';
 import toast from 'react-hot-toast';
+import { useShallow } from 'zustand/react/shallow';
 
 // Meal category configurations
 const MEAL_CATEGORIES = [
+    { id: 'extra', label: 'Extra Meals', icon: Plus, color: 'orange', description: 'Surplus meals not tied to a guest' },
     { id: 'rv', label: 'RV Meals', icon: Truck, color: 'purple', description: 'RV deliveries' },
     { id: 'day_worker', label: 'Day Worker', icon: Building2, color: 'blue', description: 'Day worker center' },
     { id: 'shelter', label: 'Shelter', icon: Home, color: 'amber', description: 'Shelter meals' },
@@ -42,6 +44,9 @@ export function MealsSection() {
     const [showAddPanel, setShowAddPanel] = useState(false);
     const [addingType, setAddingType] = useState<string | null>(null);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
+    const [individualGuestId, setIndividualGuestId] = useState('');
+    const [individualMealCount, setIndividualMealCount] = useState(1);
+    const [isPendingIndividual, setIsPendingIndividual] = useState(false);
 
     const {
         mealRecords,
@@ -52,20 +57,44 @@ export function MealsSection() {
         unitedEffortMealRecords,
         lunchBagRecords,
         deleteMealRecord,
-        deleteRvMealRecord,
         deleteExtraMealRecord,
         addBulkMealRecord,
         deleteBulkMealRecord,
         updateBulkMealRecord,
         updateMealRecord,
-        checkAndAddAutomaticMeals
-    } = useMealsStore();
-    const { guests } = useGuestsStore();
+        checkAndAddAutomaticMeals,
+        addMealRecord,
+    } = useMealsStore(useShallow((s) => ({
+        mealRecords: s.mealRecords,
+        rvMealRecords: s.rvMealRecords,
+        extraMealRecords: s.extraMealRecords,
+        dayWorkerMealRecords: s.dayWorkerMealRecords,
+        shelterMealRecords: s.shelterMealRecords,
+        unitedEffortMealRecords: s.unitedEffortMealRecords,
+        lunchBagRecords: s.lunchBagRecords,
+        deleteMealRecord: s.deleteMealRecord,
+        deleteExtraMealRecord: s.deleteExtraMealRecord,
+        addBulkMealRecord: s.addBulkMealRecord,
+        deleteBulkMealRecord: s.deleteBulkMealRecord,
+        updateBulkMealRecord: s.updateBulkMealRecord,
+        updateMealRecord: s.updateMealRecord,
+        checkAndAddAutomaticMeals: s.checkAndAddAutomaticMeals,
+        addMealRecord: s.addMealRecord,
+    })));
 
-    // Check for automatic meals on mount
-    useState(() => {
+    const guests = useGuestsStore((s) => s.guests);
+
+    useEffect(() => {
         checkAndAddAutomaticMeals();
-    });
+    }, [checkAndAddAutomaticMeals]);
+
+    const guestMap = useMemo(() => {
+        const map = new Map<string, (typeof guests)[number]>();
+        for (const g of guests) {
+            if (g?.id) map.set(g.id, g);
+        }
+        return map;
+    }, [guests]);
 
     const isToday = selectedDate === todayPacificDateString();
 
@@ -74,7 +103,8 @@ export function MealsSection() {
     const [editValue, setEditValue] = useState<number>(0);
 
     const dayMetrics = useMemo(() => {
-        const filterByDate = (records: any[]) => records.filter(r => pacificDateStringFrom(r.date) === selectedDate);
+        const filterByDate = (records: any[]) =>
+            records.filter((r) => (r?.dateKey || pacificDateStringFrom(r.date)) === selectedDate);
         // ... same existing logic ...
         const guestMeals = filterByDate(mealRecords);
         const rvMeals = filterByDate(rvMealRecords);
@@ -86,8 +116,15 @@ export function MealsSection() {
 
         const sumCount = (arr: any[]) => arr.reduce((sum, r) => sum + (r.count || 0), 0);
 
+        const proxyPickupCount = guestMeals.reduce((sum, r) => {
+            if (r?.pickedUpByGuestId && r.pickedUpByGuestId !== r.guestId) {
+                return sum + (r.count || 0);
+            }
+            return sum;
+        }, 0);
+
         return {
-            total: sumCount([...guestMeals, ...rvMeals, ...extraMeals, ...dayWorkerMeals, ...shelterMeals, ...ueMeals, ...lunchBags]),
+            total: sumCount([...guestMeals, ...rvMeals, ...extraMeals, ...dayWorkerMeals, ...shelterMeals, ...ueMeals]),
             guestCount: sumCount(guestMeals),
             rvCount: sumCount(rvMeals),
             dayWorkerCount: sumCount(dayWorkerMeals),
@@ -95,22 +132,27 @@ export function MealsSection() {
             ueCount: sumCount(ueMeals),
             lunchBagCount: sumCount(lunchBags),
             extraCount: sumCount(extraMeals),
+            proxyPickups: proxyPickupCount,
             uniqueGuests: new Set(guestMeals.map(r => r.guestId)).size
         };
     }, [selectedDate, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords]);
 
     const history = useMemo(() => {
         const allRecords = [
-            ...mealRecords.map(r => ({ ...r, type: 'guest' })),
-            ...rvMealRecords.map(r => ({ ...r, type: 'rv' })),
-            ...extraMealRecords.map(r => ({ ...r, type: 'extra' })),
-            ...dayWorkerMealRecords.map(r => ({ ...r, type: 'day_worker' })),
-            ...shelterMealRecords.map(r => ({ ...r, type: 'shelter' })),
-            ...unitedEffortMealRecords.map(r => ({ ...r, type: 'united_effort' })),
-            ...lunchBagRecords.map(r => ({ ...r, type: 'lunch_bag' })),
+            ...mealRecords.map(r => ({
+                ...r,
+                type: 'guest',
+                isProxyPickup: Boolean(r?.pickedUpByGuestId && r.pickedUpByGuestId !== r.guestId),
+            })),
+            ...rvMealRecords.map(r => ({ ...r, type: 'rv', isProxyPickup: false })),
+            ...extraMealRecords.map(r => ({ ...r, type: 'extra', isProxyPickup: false })),
+            ...dayWorkerMealRecords.map(r => ({ ...r, type: 'day_worker', isProxyPickup: false })),
+            ...shelterMealRecords.map(r => ({ ...r, type: 'shelter', isProxyPickup: false })),
+            ...unitedEffortMealRecords.map(r => ({ ...r, type: 'united_effort', isProxyPickup: false })),
+            ...lunchBagRecords.map(r => ({ ...r, type: 'lunch_bag', isProxyPickup: false })),
         ];
         return allRecords
-            .filter(r => pacificDateStringFrom(r.date) === selectedDate)
+            .filter((r) => (r?.dateKey || pacificDateStringFrom(r.date)) === selectedDate)
             .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
     }, [selectedDate, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords]);
 
@@ -178,6 +220,31 @@ export function MealsSection() {
         }
     };
 
+    const handleAddIndividualMeal = async () => {
+        if (!individualGuestId) {
+            toast.error('Please select a guest');
+            return;
+        }
+
+        if (individualMealCount <= 0) {
+            toast.error('Meal count must be at least 1');
+            return;
+        }
+
+        setIsPendingIndividual(true);
+        try {
+            await addMealRecord(individualGuestId, individualMealCount, null, selectedDate);
+            toast.success(`Added meal record${!isToday ? ` for ${selectedDate}` : ''}`);
+            setIndividualGuestId('');
+            setIndividualMealCount(1);
+        } catch (error) {
+            console.error('Failed to add individual meal:', error);
+            toast.error('Failed to add individual meal');
+        } finally {
+            setIsPendingIndividual(false);
+        }
+    };
+
     const shiftDate = (days: number) => {
         const d = new Date(selectedDate + 'T12:00:00');
         d.setDate(d.getDate() + days);
@@ -192,11 +259,21 @@ export function MealsSection() {
         if (type === 'lunch_bag') return 'Lunch Bags';
         if (type === 'united_effort') return 'United Effort';
         if (type === 'extra') {
-            const guest = guests.find(g => g.id === record.guestId);
+            const guest = guestMap.get(record.guestId);
             return `${guest ? (guest.preferredName || guest.firstName) : 'Guest'} (Extra)`;
         }
-        const guest = guests.find(g => g.id === record.guestId);
+        const guest = guestMap.get(record.guestId);
         return guest ? (guest.preferredName || guest.firstName + ' ' + (guest.lastName || '')) : 'Unknown Guest';
+    };
+
+    const getPickedUpByName = (record: any) => {
+        const pickupId = record?.pickedUpByGuestId;
+        if (!pickupId) return null;
+        const pickupGuest = guestMap.get(pickupId);
+        if (!pickupGuest) return 'Buddy';
+        const preferred = pickupGuest.preferredName || pickupGuest.firstName;
+        if (preferred) return preferred;
+        return pickupGuest.name || 'Buddy';
     };
 
     // ... getRecordIcon, getRecordColor ...
@@ -296,7 +373,60 @@ export function MealsSection() {
                             <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                 <Plus size={16} /> Quick Add Bulk Meals
                             </h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                            <p className="text-[11px] text-gray-500 mb-4" title="All entries in this panel save to the date selected above.">
+                                Entries save to selected date: {new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+
+                            <div className="mb-5 p-4 rounded-2xl border border-emerald-100 bg-emerald-50/40">
+                                <p className="text-[11px] font-black uppercase tracking-widest text-emerald-700 mb-3">Individual Meal Entry</p>
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_120px_160px] gap-3">
+                                    <select
+                                        value={individualGuestId}
+                                        onChange={(e) => setIndividualGuestId(e.target.value)}
+                                        className="w-full p-2.5 rounded-xl border border-emerald-200 bg-white text-sm font-medium"
+                                    >
+                                        <option value="">Select guest</option>
+                                        {guests
+                                            .filter((guest) => guest?.id)
+                                            .sort((firstGuest, secondGuest) => {
+                                                const firstName = (firstGuest.preferredName || firstGuest.name || `${firstGuest.firstName || ''} ${firstGuest.lastName || ''}`).toString();
+                                                const secondName = (secondGuest.preferredName || secondGuest.name || `${secondGuest.firstName || ''} ${secondGuest.lastName || ''}`).toString();
+                                                return firstName.localeCompare(secondName);
+                                            })
+                                            .map((guest) => {
+                                                const displayName = guest.preferredName || guest.name || `${guest.firstName || ''} ${guest.lastName || ''}`.trim() || 'Guest';
+                                                return (
+                                                    <option key={guest.id} value={guest.id}>
+                                                        {displayName}
+                                                    </option>
+                                                );
+                                            })}
+                                    </select>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={individualMealCount}
+                                        onChange={(e) => setIndividualMealCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                        className="w-full p-2.5 rounded-xl border border-emerald-200 bg-white text-sm font-bold text-center"
+                                        aria-label="Individual meal quantity"
+                                    />
+                                    <button
+                                        onClick={handleAddIndividualMeal}
+                                        disabled={!individualGuestId || isPendingIndividual}
+                                        className={cn(
+                                            "w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                                            !individualGuestId || isPendingIndividual
+                                                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                        )}
+                                    >
+                                        {isPendingIndividual ? 'Adding...' : `Add${!isToday ? ` for ${selectedDate}` : ''}`}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-3">Bulk Meal Entry</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                                 {MEAL_CATEGORIES.map((category) => {
                                     const Icon = category.icon;
                                     const qty = quantities[category.id] || 0;
@@ -307,6 +437,7 @@ export function MealsSection() {
                                             key={category.id}
                                             className={cn(
                                                 "rounded-2xl border-2 p-4 transition-all",
+                                                category.color === 'orange' && "border-orange-200 bg-orange-50",
                                                 category.color === 'purple' && "border-purple-200 bg-purple-50",
                                                 category.color === 'blue' && "border-blue-200 bg-blue-50",
                                                 category.color === 'amber' && "border-amber-200 bg-amber-50",
@@ -317,6 +448,7 @@ export function MealsSection() {
                                             <div className="flex items-center gap-3 mb-4">
                                                 <div className={cn(
                                                     "p-2.5 rounded-xl shrink-0",
+                                                    category.color === 'orange' && "bg-orange-100 text-orange-600",
                                                     category.color === 'purple' && "bg-purple-100 text-purple-600",
                                                     category.color === 'blue' && "bg-blue-100 text-blue-600",
                                                     category.color === 'amber' && "bg-amber-100 text-amber-600",
@@ -375,14 +507,25 @@ export function MealsSection() {
                 )}
             </AnimatePresence>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <StatCard label="Total Meals" value={dayMetrics.total} color="emerald" />
-                <StatCard label="Guest Meals" value={dayMetrics.guestCount} color="blue" />
-                <StatCard label="RV Meals" value={dayMetrics.rvCount} color="purple" />
-                <StatCard label="Day Worker" value={dayMetrics.dayWorkerCount} color="sky" />
-                <StatCard label="Lunch Bags" value={dayMetrics.lunchBagCount} color="amber" />
-                <StatCard label="Partner Orgs" value={dayMetrics.ueCount + dayMetrics.shelterCount} color="rose" />
+            {/* Service Summary */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <StatCard label="Total Meals" value={dayMetrics.total} color="emerald" />
+                    <StatCard label="Guest Meals" value={dayMetrics.guestCount} color="blue" />
+                    <StatCard label="Proxy Pickups" value={dayMetrics.proxyPickups} color="indigo" />
+                    <StatCard label="Lunch Bags" value={dayMetrics.lunchBagCount} color="amber" />
+                </div>
+
+                <div className="border-t border-gray-100 pt-4">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Distribution Details</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                        <CompactStat label="Extra" value={dayMetrics.extraCount} color="amber" />
+                        <CompactStat label="RV" value={dayMetrics.rvCount} color="purple" />
+                        <CompactStat label="Day Worker" value={dayMetrics.dayWorkerCount} color="sky" />
+                        <CompactStat label="Shelter" value={dayMetrics.shelterCount} color="rose" />
+                        <CompactStat label="United Effort" value={dayMetrics.ueCount} color="rose" />
+                    </div>
+                </div>
             </div>
 
             {/* History List */}
@@ -434,6 +577,13 @@ export function MealsSection() {
                                                     </p>
                                                 )}
                                             </div>
+
+                                            {record?.isProxyPickup && (
+                                                <p className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1">
+                                                    <span aria-hidden>🤝</span>
+                                                    <span>Picked up by {getPickedUpByName(record)}</span>
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
@@ -446,9 +596,22 @@ export function MealsSection() {
                                             record.type === 'lunch_bag' && "bg-emerald-100 text-emerald-700",
                                             record.type === 'united_effort' && "bg-rose-100 text-rose-700",
                                             record.type === 'extra' && "bg-orange-100 text-orange-700",
-                                            record.type === 'guest' && "bg-gray-100 text-gray-700",
+                                            record.type === 'guest' && !record?.isProxyPickup && "bg-gray-100 text-gray-700",
+                                            record.type === 'guest' && record?.isProxyPickup && "bg-emerald-100 text-emerald-700",
                                         )}>
-                                            {record.type === 'day_worker' ? 'Day Worker' : record.type === 'lunch_bag' ? 'Lunch Bag' : record.type === 'united_effort' ? 'United Effort' : record.type === 'extra' ? 'Extra' : record.type === 'guest' ? 'Guest' : record.type}
+                                            {record.type === 'guest' && record?.isProxyPickup
+                                                ? '🤝 Proxy Pickup'
+                                                : record.type === 'day_worker'
+                                                    ? 'Day Worker'
+                                                    : record.type === 'lunch_bag'
+                                                        ? 'Lunch Bag'
+                                                        : record.type === 'united_effort'
+                                                            ? 'United Effort'
+                                                            : record.type === 'extra'
+                                                                ? 'Extra'
+                                                                : record.type === 'guest'
+                                                                    ? 'Guest'
+                                                                    : record.type}
                                         </span>
                                         {!isEditing && (
                                             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -499,9 +662,28 @@ function StatCard({ label, value, color }: { label: string, value: number, color
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+        <div className="bg-gray-50 rounded-2xl border border-gray-100 p-4">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</p>
             <p className={cn("text-2xl font-black tracking-tight", textColors[color])}>{value.toLocaleString()}</p>
+        </div>
+    );
+}
+
+function CompactStat({ label, value, color }: { label: string, value: number, color: 'emerald' | 'blue' | 'indigo' | 'purple' | 'sky' | 'amber' | 'rose' }) {
+    const textColors: Record<string, string> = {
+        emerald: 'text-emerald-600',
+        blue: 'text-blue-600',
+        indigo: 'text-indigo-600',
+        purple: 'text-purple-600',
+        sky: 'text-sky-600',
+        amber: 'text-amber-600',
+        rose: 'text-rose-600',
+    };
+
+    return (
+        <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
+            <span className={cn('text-sm font-black', textColors[color])}>{value.toLocaleString()}</span>
         </div>
     );
 }

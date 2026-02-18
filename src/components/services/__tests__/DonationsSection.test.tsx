@@ -1,19 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
-import { DonationsSection, groupDonationsByItem, getRecentItemNames } from '../DonationsSection';
-import { DonationRecord } from '@/types/database';
+import { DonationsSection, groupDonationsByItem, getRecentItemNames, QuickSelectItem } from '../DonationsSection';
+import { DonationRecord } from '@/stores/useDonationsStore';
 
 // Mock the stores
 const mockDonationsStore = {
     donationRecords: [] as DonationRecord[],
-    laPlazaRecords: [] as any[],
     addDonation: vi.fn().mockResolvedValue({ id: 'd-new' }),
     updateDonation: vi.fn().mockResolvedValue(true),
     deleteDonation: vi.fn().mockResolvedValue(true),
-    addLaPlazaDonation: vi.fn().mockResolvedValue(true),
-    updateLaPlazaDonation: vi.fn().mockResolvedValue(true),
-    deleteLaPlazaDonation: vi.fn().mockResolvedValue(true),
 };
 
 vi.mock('next-auth/react', () => ({
@@ -70,6 +66,7 @@ const createDonationRecord = (overrides: Partial<DonationRecord> = {}): Donation
     servings: 20,
     temperature: '165°F',
     donor: 'LinkedIn',
+    date: '2024-01-15T10:00:00Z',
     dateKey: '2024-01-15',
     createdAt: '2024-01-15T10:00:00Z',
     donatedAt: '2024-01-15T10:00:00Z',
@@ -172,31 +169,34 @@ describe('groupDonationsByItem', () => {
 describe('getRecentItemNames', () => {
     it('returns unique item names sorted by most recent first', () => {
         const records: DonationRecord[] = [
-            createDonationRecord({ itemName: 'Oldest Item', donatedAt: '2024-01-10T10:00:00Z' }),
-            createDonationRecord({ itemName: 'Middle Item', donatedAt: '2024-01-12T10:00:00Z' }),
-            createDonationRecord({ itemName: 'Newest Item', donatedAt: '2024-01-15T10:00:00Z' })
+            createDonationRecord({ itemName: 'Oldest Item', donatedAt: '2024-01-10T10:00:00Z', donor: 'Donor A' }),
+            createDonationRecord({ itemName: 'Middle Item', donatedAt: '2024-01-12T10:00:00Z', donor: 'Donor B' }),
+            createDonationRecord({ itemName: 'Newest Item', donatedAt: '2024-01-15T10:00:00Z', donor: 'Donor C' })
         ];
 
         const recent = getRecentItemNames(records, 5);
 
-        expect(recent[0]).toBe('Newest Item');
-        expect(recent[1]).toBe('Middle Item');
-        expect(recent[2]).toBe('Oldest Item');
+        expect(recent[0].itemName).toBe('Newest Item');
+        expect(recent[0].donor).toBe('Donor C');
+        expect(recent[1].itemName).toBe('Middle Item');
+        expect(recent[2].itemName).toBe('Oldest Item');
     });
 
     it('returns only unique item names (case-insensitive)', () => {
         const records: DonationRecord[] = [
-            createDonationRecord({ itemName: 'Chicken', donatedAt: '2024-01-15T12:00:00Z' }),
-            createDonationRecord({ itemName: 'CHICKEN', donatedAt: '2024-01-15T11:00:00Z' }),
-            createDonationRecord({ itemName: 'chicken', donatedAt: '2024-01-15T10:00:00Z' }),
-            createDonationRecord({ itemName: 'Beef', donatedAt: '2024-01-14T10:00:00Z' })
+            createDonationRecord({ itemName: 'Chicken', donatedAt: '2024-01-15T12:00:00Z', donor: 'LinkedIn' }),
+            createDonationRecord({ itemName: 'CHICKEN', donatedAt: '2024-01-15T11:00:00Z', donor: 'Waymo' }),
+            createDonationRecord({ itemName: 'chicken', donatedAt: '2024-01-15T10:00:00Z', donor: '' }),
+            createDonationRecord({ itemName: 'Beef', donatedAt: '2024-01-14T10:00:00Z', donor: 'Anonymous' })
         ];
 
         const recent = getRecentItemNames(records, 5);
 
         expect(recent).toHaveLength(2);
-        expect(recent[0]).toBe('Chicken');
-        expect(recent[1]).toBe('Beef');
+        expect(recent[0].itemName).toBe('Chicken');
+        expect(recent[0].donor).toBe('LinkedIn');
+        expect(recent[1].itemName).toBe('Beef');
+        expect(recent[1].donor).toBe('Anonymous');
     });
 
     it('respects the limit parameter', () => {
@@ -212,7 +212,7 @@ describe('getRecentItemNames', () => {
         const recent = getRecentItemNames(records, 3);
 
         expect(recent).toHaveLength(3);
-        expect(recent).toEqual(['Item 1', 'Item 2', 'Item 3']);
+        expect(recent.map(r => r.itemName)).toEqual(['Item 1', 'Item 2', 'Item 3']);
     });
 
     it('skips empty item names', () => {
@@ -225,7 +225,7 @@ describe('getRecentItemNames', () => {
         const recent = getRecentItemNames(records, 5);
 
         expect(recent).toHaveLength(1);
-        expect(recent[0]).toBe('Valid Item');
+        expect(recent[0].itemName).toBe('Valid Item');
     });
 
     it('returns empty array for empty input', () => {
@@ -241,8 +241,21 @@ describe('getRecentItemNames', () => {
 
         const recent = getRecentItemNames(records, 5);
 
-        expect(recent[0]).toBe('Item A');
-        expect(recent[1]).toBe('Item B');
+        expect(recent[0].itemName).toBe('Item A');
+        expect(recent[1].itemName).toBe('Item B');
+    });
+
+    it('includes donor info from the most recent record for each item', () => {
+        const records: DonationRecord[] = [
+            createDonationRecord({ itemName: 'Chicken', donatedAt: '2024-01-15T12:00:00Z', donor: 'Latest Donor' }),
+            createDonationRecord({ itemName: 'Chicken', donatedAt: '2024-01-14T10:00:00Z', donor: 'Old Donor' }),
+            createDonationRecord({ itemName: 'Rice', donatedAt: '2024-01-13T10:00:00Z', donor: '' })
+        ];
+
+        const recent = getRecentItemNames(records, 5);
+
+        expect(recent[0].donor).toBe('Latest Donor');
+        expect(recent[1].donor).toBe('');
     });
 });
 
@@ -250,7 +263,6 @@ describe('DonationsSection Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockDonationsStore.donationRecords = [];
-        mockDonationsStore.laPlazaRecords = [];
     });
 
     afterEach(() => {
@@ -258,12 +270,10 @@ describe('DonationsSection Component', () => {
     });
 
     describe('Rendering', () => {
-        it('renders the header and view mode toggle', () => {
+        it('renders the header', () => {
             render(<DonationsSection />);
 
-            expect(screen.getByText('General Donations')).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'General' })).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: 'La Plaza' })).toBeInTheDocument();
+            expect(screen.getByText('Donations')).toBeInTheDocument();
         });
 
         it('displays empty state when no records exist', () => {
@@ -364,6 +374,27 @@ describe('DonationsSection Component', () => {
             });
 
             expect(itemNameInput.value).toBe('Chicken');
+        });
+
+        it('auto-populates donor name when quick select button is clicked', async () => {
+            mockDonationsStore.donationRecords = [
+                createDonationRecord({ itemName: 'Chicken', donor: 'LinkedIn', donatedAt: '2024-01-15T12:00:00Z' })
+            ];
+
+            await act(async () => {
+                render(<DonationsSection />);
+            });
+
+            const quickSelectButton = screen.getByRole('button', { name: 'Chicken' });
+            const donorInput = screen.getByPlaceholderText('e.g., Waymo, LinkedIn, Anonymous') as HTMLInputElement;
+
+            expect(donorInput.value).toBe('');
+
+            await act(async () => {
+                fireEvent.click(quickSelectButton);
+            });
+
+            expect(donorInput.value).toBe('LinkedIn');
         });
 
         it('does not show quick select when no recent items exist', async () => {
@@ -496,22 +527,6 @@ describe('DonationsSection Component', () => {
 
             // Collapsed again
             expect(screen.queryByText(/Donor A/)).not.toBeInTheDocument();
-        });
-    });
-
-    describe('Tab Switching', () => {
-        it('switches between General and La Plaza view modes', async () => {
-            await act(async () => {
-                render(<DonationsSection />);
-            });
-
-            expect(screen.getByText('General Donations')).toBeInTheDocument();
-
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: 'La Plaza' }));
-            });
-
-            expect(screen.getByText('La Plaza Donations')).toBeInTheDocument();
         });
     });
 

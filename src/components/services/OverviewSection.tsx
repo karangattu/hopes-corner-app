@@ -91,7 +91,7 @@ export function OverviewSection({
                 <MetricCard
                     title="Meals served today"
                     value={metrics.mealsToday}
-                    subtitle="Includes seconds and extra requests"
+                    subtitle="All meals excluding lunch bags"
                     icon={Utensils}
                     iconBg="bg-emerald-50"
                     iconColor="text-emerald-600"
@@ -113,9 +113,9 @@ export function OverviewSection({
                     iconColor="text-sky-600"
                 />
                 <MetricCard
-                    title="Laundry loads"
+                    title="Laundry loads completed"
                     value={metrics.laundryTotal}
-                    subtitle={`${metrics.laundryActive} active loads · ${metrics.laundryDone} ready`}
+                    subtitle={`${metrics.laundryActive} active loads in progress`}
                     icon={WashingMachine}
                     iconBg="bg-purple-50"
                     iconColor="text-purple-600"

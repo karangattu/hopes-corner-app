@@ -104,6 +104,27 @@ describe('MonthlySummaryReport', () => {
         expect(screen.getAllByText('0').length).toBeGreaterThan(0);
     });
 
+    it('uses solid background classes for sticky month column cells', () => {
+        const { container } = render(<MonthlySummaryReport />);
+
+        const mealsTable = container.querySelectorAll('table')[0];
+        const monthHeader = mealsTable?.querySelector('thead tr:nth-child(2) th:first-child');
+        const monthBodyCell = mealsTable?.querySelector('tbody tr td:first-child');
+        const monthTotalCell = mealsTable?.querySelector('tbody tr:last-child td:first-child');
+
+        expect(monthHeader).toHaveClass('bg-gray-50');
+        expect(monthBodyCell).toHaveClass('bg-white');
+        expect(monthTotalCell).toHaveClass('bg-gray-100');
+    });
+
+    it('renders a dynamic upcoming months note for current year', () => {
+        render(<MonthlySummaryReport />);
+
+        const upcomingNote = screen.getByText(/Upcoming months/i);
+        expect(upcomingNote.textContent).toContain('will populate as data is recorded');
+        expect(upcomingNote.textContent).not.toContain('February, March, April, May, June, July, August, September, October, November, December');
+    });
+
     describe('New Guests calculation', () => {
         it('counts guests whose first meal is in the given month as new guests', () => {
             // Use 2025 to ensure both January and February rows are shown

@@ -37,9 +37,9 @@ const MEAL_COLUMN_DEFINITIONS: MealColumnDefinition[] = [
         label: 'Month',
         description: null,
         align: 'left',
-        headerBg: '',
-        cellBg: '',
-        totalCellBg: '',
+        headerBg: 'bg-gray-50',
+        cellBg: 'bg-white',
+        totalCellBg: 'bg-gray-100',
         bodyClass: 'font-medium text-gray-900',
         totalBodyClass: 'font-bold text-gray-900',
         isNumeric: false,
@@ -271,6 +271,19 @@ export default function MonthlySummaryReport() {
         return years;
     }, [currentYear]);
 
+    const upcomingMonthsLabel = useMemo(() => {
+        const firstUpcomingMonthIndex =
+            selectedYear < currentYear
+                ? 12
+                : selectedYear > currentYear
+                    ? 0
+                    : currentMonth + 1;
+
+        const upcomingMonths = MONTH_NAMES.slice(firstUpcomingMonthIndex);
+        if (upcomingMonths.length === 0) return '';
+        return upcomingMonths.join(', ');
+    }, [selectedYear, currentYear, currentMonth]);
+
     const getDayOfWeek = useCallback((dateStr: string) => {
         if (!dateStr) return null;
         // Parse "YYYY-MM-DD" in Pacific time correctly
@@ -401,6 +414,13 @@ export default function MonthlySummaryReport() {
             });
         }
 
+        // Compute YTD unique guests across all months using a global Set
+        const ytdUniqueGuestIds = new Set<string>();
+        for (let month = 0; month <= effectiveLastMonth; month++) {
+            const mealsInMonth = filterRecords(mealRecords, selectedYear, month);
+            mealsInMonth.forEach((r: any) => { if (r.guestId) ytdUniqueGuestIds.add(r.guestId); });
+        }
+
         // Totals row
         const totals = {
             month: 'Year to Date',
@@ -408,7 +428,7 @@ export default function MonthlySummaryReport() {
             wednesdayMeals: months.reduce((s, m) => s + m.wednesdayMeals, 0),
             fridayMeals: months.reduce((s, m) => s + m.fridayMeals, 0),
             saturdayMeals: months.reduce((s, m) => s + m.saturdayMeals, 0),
-            uniqueGuests: 0, // Needs global Set
+            uniqueGuests: ytdUniqueGuestIds.size,
             newGuests: months.reduce((s, m) => s + m.newGuests, 0),
             proxyPickups: months.reduce((s, m) => s + m.proxyPickups, 0),
             onsiteHotMeals: months.reduce((s, m) => s + m.onsiteHotMeals, 0),
@@ -1041,9 +1061,11 @@ export default function MonthlySummaryReport() {
                         </tbody>
                     </table>
                 </div>
-                <p className="text-xs text-gray-400 mt-4 text-center italic">
-                    Upcoming months (February, March, April, May, June, July, August, September, October, November, December) will populate as data is recorded.
-                </p>
+                {upcomingMonthsLabel && (
+                    <p className="text-xs text-gray-400 mt-4 text-center italic">
+                        Upcoming months ({upcomingMonthsLabel}) will populate as data is recorded.
+                    </p>
+                )}
             </div>
 
             {/* Summary Cards */}

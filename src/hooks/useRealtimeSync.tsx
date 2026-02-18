@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { subscribeToTable, unsubscribeFromAll } from '@/lib/supabase/realtime';
+import { subscribeToTable } from '@/lib/supabase/realtime';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useRemindersStore } from '@/stores/useRemindersStore';
+import { useBlockedSlotsStore } from '@/stores/useBlockedSlotsStore';
+import { useDailyNotesStore } from '@/stores/useDailyNotesStore';
+import { useDonationsStore } from '@/stores/useDonationsStore';
 
 /**
  * Hook to set up realtime subscriptions for all critical tables.
@@ -20,10 +23,14 @@ export function useRealtimeSync() {
     const guestsLoadWarnings = useGuestsStore(state => state.loadGuestWarningsFromSupabase);
     const guestsLoadProxies = useGuestsStore(state => state.loadGuestProxiesFromSupabase);
     const remindersLoadFromSupabase = useRemindersStore(state => state.loadFromSupabase);
+    const blockedSlotsFetch = useBlockedSlotsStore(state => state.fetchBlockedSlots);
+    const dailyNotesLoadFromSupabase = useDailyNotesStore(state => state.loadFromSupabase);
+    const donationsLoadFromSupabase = useDonationsStore(state => state.loadFromSupabase);
 
     // Track if subscriptions are set up
     const subscriptionsRef = useRef<(() => void)[]>([]);
     const isSetupRef = useRef(false);
+    const realtimeDebugEnabled = process.env.NEXT_PUBLIC_REALTIME_DEBUG === 'true';
 
     useEffect(() => {
         // Prevent double setup in strict mode
@@ -32,20 +39,32 @@ export function useRealtimeSync() {
         }
         isSetupRef.current = true;
 
-        console.log('[RealtimeSync] Setting up realtime subscriptions');
+        if (realtimeDebugEnabled) {
+            console.log('[RealtimeSync] Setting up realtime subscriptions');
+        }
 
-        // Debounce refreshes to prevent rapid-fire updates
-        let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
-        const debouncedRefresh = (refreshFn: () => void | Promise<void>, delay = 500) => {
-            if (refreshTimeout) {
-                clearTimeout(refreshTimeout);
+        // Debounce refreshes per group so unrelated tables don't cancel each other
+        const refreshTimeouts: Record<string, ReturnType<typeof setTimeout> | null> = {
+            services: null,
+            meals: null,
+            guests: null,
+            warnings: null,
+            proxies: null,
+            reminders: null,
+            blockedSlots: null,
+            dailyNotes: null,
+            donations: null,
+        };
+
+        const debouncedRefresh = (key: keyof typeof refreshTimeouts, refreshFn: () => void | Promise<void>, delay = 500) => {
+            if (refreshTimeouts[key]) {
+                clearTimeout(refreshTimeouts[key]!);
             }
-            refreshTimeout = setTimeout(() => {
+            refreshTimeouts[key] = setTimeout(() => {
                 try {
                     const result = refreshFn();
-                    // Only call .catch if it's a promise
-                    if (result && typeof result.catch === 'function') {
-                        result.catch(err => console.error('[RealtimeSync] Refresh error:', err));
+                    if (result && typeof (result as any).catch === 'function') {
+                        (result as any).catch((err: any) => console.error('[RealtimeSync] Refresh error:', err));
                     }
                 } catch (err) {
                     console.error('[RealtimeSync] Refresh error:', err);
@@ -56,43 +75,67 @@ export function useRealtimeSync() {
         // Subscribe to shower changes
         const unsubShowers = subscribeToTable({
             table: 'shower_reservations',
-            onChange: () => debouncedRefresh(servicesLoadFromSupabase),
+            onChange: () => debouncedRefresh('services', servicesLoadFromSupabase),
         });
 
         // Subscribe to laundry changes
         const unsubLaundry = subscribeToTable({
             table: 'laundry_bookings',
-            onChange: () => debouncedRefresh(servicesLoadFromSupabase),
+            onChange: () => debouncedRefresh('services', servicesLoadFromSupabase),
         });
 
         // Subscribe to meal attendance changes
         const unsubMeals = subscribeToTable({
             table: 'meal_attendance',
-            onChange: () => debouncedRefresh(mealsLoadFromSupabase),
+            onChange: () => debouncedRefresh('meals', mealsLoadFromSupabase),
         });
 
         // Subscribe to bicycle repairs changes
         const unsubBicycles = subscribeToTable({
             table: 'bicycle_repairs',
-            onChange: () => debouncedRefresh(servicesLoadFromSupabase),
+            onChange: () => debouncedRefresh('services', servicesLoadFromSupabase),
         });
 
         // Subscribe to guest changes
         const unsubGuests = subscribeToTable({
             table: 'guests',
-            onChange: () => debouncedRefresh(guestsLoadFromSupabase),
+            onChange: () => debouncedRefresh('guests', guestsLoadFromSupabase),
         });
 
         // Subscribe to guest warnings changes
         const unsubWarnings = subscribeToTable({
             table: 'guest_warnings',
-            onChange: () => debouncedRefresh(guestsLoadWarnings),
+            onChange: () => debouncedRefresh('warnings', guestsLoadWarnings),
+        });
+
+        // Subscribe to guest proxies changes
+        const unsubProxies = subscribeToTable({
+            table: 'guest_proxies',
+            onChange: () => debouncedRefresh('proxies', guestsLoadProxies),
         });
 
         // Subscribe to guest reminders changes
         const unsubReminders = subscribeToTable({
             table: 'guest_reminders',
-            onChange: () => debouncedRefresh(remindersLoadFromSupabase),
+            onChange: () => debouncedRefresh('reminders', remindersLoadFromSupabase),
+        });
+
+        // Subscribe to blocked slots changes (affects shower/laundry availability)
+        const unsubBlockedSlots = subscribeToTable({
+            table: 'blocked_slots',
+            onChange: () => debouncedRefresh('blockedSlots', blockedSlotsFetch),
+        });
+
+        // Subscribe to daily notes changes
+        const unsubDailyNotes = subscribeToTable({
+            table: 'daily_notes',
+            onChange: () => debouncedRefresh('dailyNotes', dailyNotesLoadFromSupabase),
+        });
+
+        // Subscribe to donations changes
+        const unsubDonations = subscribeToTable({
+            table: 'donations',
+            onChange: () => debouncedRefresh('donations', donationsLoadFromSupabase),
         });
 
         // Store unsubscribe functions
@@ -103,14 +146,21 @@ export function useRealtimeSync() {
             unsubBicycles,
             unsubGuests,
             unsubWarnings,
+            unsubProxies,
             unsubReminders,
+            unsubBlockedSlots,
+            unsubDailyNotes,
+            unsubDonations,
         ];
 
         // Cleanup on unmount
         return () => {
-            console.log('[RealtimeSync] Cleaning up realtime subscriptions');
-            if (refreshTimeout) {
-                clearTimeout(refreshTimeout);
+            if (realtimeDebugEnabled) {
+                console.log('[RealtimeSync] Cleaning up realtime subscriptions');
+            }
+            for (const key of Object.keys(refreshTimeouts)) {
+                const t = refreshTimeouts[key];
+                if (t) clearTimeout(t);
             }
             subscriptionsRef.current.forEach(unsub => unsub());
             subscriptionsRef.current = [];
@@ -123,6 +173,9 @@ export function useRealtimeSync() {
         guestsLoadWarnings,
         guestsLoadProxies,
         remindersLoadFromSupabase,
+        blockedSlotsFetch,
+        dailyNotesLoadFromSupabase,
+        donationsLoadFromSupabase,
     ]);
 }
 

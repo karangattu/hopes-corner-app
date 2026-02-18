@@ -7,7 +7,7 @@
  * and wire up Zustand stores, toast, and other browser-side dependencies
  * internally.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useLayoutEffect } from 'react';
 import { TodayStats } from '@/components/checkin/TodayStats';
 import { BanManagementModal } from '@/components/modals/BanManagementModal';
 import { GuestEditModal } from '@/components/modals/GuestEditModal';
@@ -17,6 +17,8 @@ import { LaundryBookingModal } from '@/components/modals/LaundryBookingModal';
 import { MealsSection } from '@/components/services/MealsSection';
 import { DonationsSection } from '@/components/services/DonationsSection';
 import { BicycleSection } from '@/components/services/BicycleSection';
+import { ShowersSection } from '@/components/services/ShowersSection';
+import { LaundrySection } from '@/components/services/LaundrySection';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { useModalStore } from '@/stores/useModalStore';
@@ -360,6 +362,7 @@ interface MealsSectionStoryProps {
   mealRecords?: Array<{
     id: string;
     guestId: string;
+    pickedUpByGuestId?: string | null;
     count: number;
     date: string;
     createdAt?: string;
@@ -432,7 +435,9 @@ export function MealsSectionStory({
   lunchBagRecords = [],
   guests = [],
 }: MealsSectionStoryProps) {
-  useEffect(() => {
+  // Use layout effect so the store is seeded before MealsSection's own useEffects run.
+  // Otherwise CT will execute the real store actions (Supabase client creation) on mount.
+  useLayoutEffect(() => {
     useMealsStore.setState({
       mealRecords: mealRecords as any,
       rvMealRecords: rvMealRecords as any,
@@ -454,7 +459,16 @@ export function MealsSectionStory({
     useGuestsStore.setState({
       guests: guests as any,
     });
-  }, [mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, guests]);
+  }, [
+    mealRecords,
+    rvMealRecords,
+    extraMealRecords,
+    dayWorkerMealRecords,
+    shelterMealRecords,
+    unitedEffortMealRecords,
+    lunchBagRecords,
+    guests,
+  ]);
 
   return <MealsSection />;
 }
@@ -480,26 +494,14 @@ interface DonationsSectionStoryProps {
     createdAt?: string;
     donatedAt?: string;
   }>;
-  /** La Plaza donation records */
-  laPlazaRecords?: Array<{
-    id: string;
-    category: string;
-    weightLbs: number;
-    notes?: string;
-    receivedAt?: string;
-    dateKey?: string;
-    createdAt?: string;
-  }>;
 }
 
 export function DonationsSectionStory({
   donationRecords = [],
-  laPlazaRecords = [],
 }: DonationsSectionStoryProps) {
   useEffect(() => {
     useDonationsStore.setState({
       donationRecords: donationRecords as any,
-      laPlazaRecords: laPlazaRecords as any,
       addDonation: (async (d: any) => {
         const newRecord = {
           id: 'new-donation-' + Date.now(),
@@ -524,27 +526,8 @@ export function DonationsSectionStory({
           donationRecords: state.donationRecords.filter((r: any) => r.id !== id),
         }));
       }) as any,
-      addLaPlazaDonation: (async (d: any) => {
-        const newRecord = {
-          id: 'new-laplaza-' + Date.now(),
-          category: d.category,
-          weightLbs: d.weight_lbs || 0,
-          notes: d.notes || '',
-          dateKey: d.date_key,
-        };
-        useDonationsStore.setState((state: any) => ({
-          laPlazaRecords: [...state.laPlazaRecords, newRecord],
-        }));
-        return newRecord;
-      }) as any,
-      updateLaPlazaDonation: (async () => ({})) as any,
-      deleteLaPlazaDonation: (async (id: string) => {
-        useDonationsStore.setState((state: any) => ({
-          laPlazaRecords: state.laPlazaRecords.filter((r: any) => r.id !== id),
-        }));
-      }) as any,
     });
-  }, [donationRecords, laPlazaRecords]);
+  }, [donationRecords]);
 
   return <DonationsSection />;
 }
@@ -611,4 +594,176 @@ export function BicycleSectionStory({
   }, [bicycleRecords, guests]);
 
   return <BicycleSection />;
+}
+
+// ---------------------------------------------------------------------------
+// ShowersSection wrapper
+// ---------------------------------------------------------------------------
+
+interface ShowersSectionStoryProps {
+  role?: 'checkin' | 'staff' | 'admin';
+  showerRecords?: Array<{
+    id: string;
+    guestId: string;
+    time?: string | null;
+    date?: string;
+    dateKey?: string;
+    status: string;
+  }>;
+  guests?: Array<{
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    preferredName?: string;
+    name?: string;
+  }>;
+}
+
+export function ShowersSectionStory({
+  role = 'admin',
+  showerRecords = [],
+  guests = [],
+}: ShowersSectionStoryProps) {
+  const [lastAddPayload, setLastAddPayload] = React.useState('');
+
+  useLayoutEffect(() => {
+    (__setMockSession as any)({
+      data: { user: { role, email: 'test@test.com', name: 'Test User' }, expires: '2099-01-01' },
+      status: 'authenticated',
+    });
+
+    useGuestsStore.setState({
+      guests: guests as any,
+    });
+
+    useServicesStore.setState({
+      showerRecords: showerRecords as any,
+      cancelMultipleShowers: (async () => true) as any,
+      updateShowerStatus: (async () => true) as any,
+      addShowerWaitlist: (async () => ({ id: 'waitlist-ct' })) as any,
+      addShowerRecord: (async (guestId: string, time?: string, serviceDate?: string, initialStatus: 'booked' | 'done' = 'booked') => {
+        setLastAddPayload(JSON.stringify({ guestId, time: time || null, serviceDate: serviceDate || null, initialStatus }));
+        return {
+          id: `shower-${Date.now()}`,
+          guestId,
+          time: time || null,
+          date: serviceDate ? `${serviceDate}T12:00:00.000Z` : new Date().toISOString(),
+          dateKey: serviceDate || undefined,
+          status: initialStatus,
+        };
+      }) as any,
+    });
+
+    useRemindersStore.setState({
+      reminders: [],
+      getRemindersForService: (() => []) as any,
+      hasActiveReminder: (() => false) as any,
+    });
+
+    useWaiverStore.setState({
+      waiverVersion: 0,
+      guestNeedsWaiverReminder: (async () => false) as any,
+      hasActiveWaiver: (async () => false) as any,
+      dismissWaiver: (async () => true) as any,
+    });
+  }, [guests, role, showerRecords]);
+
+  return (
+    <>
+      <ShowersSection />
+      <div data-testid="last-shower-add">{lastAddPayload}</div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LaundrySection wrapper
+// ---------------------------------------------------------------------------
+
+interface LaundrySectionStoryProps {
+  role?: 'checkin' | 'staff' | 'admin';
+  laundryRecords?: Array<{
+    id: string;
+    guestId: string;
+    time?: string | null;
+    laundryType?: string;
+    bagNumber?: string;
+    date?: string;
+    dateKey?: string;
+    status: string;
+  }>;
+  guests?: Array<{
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    preferredName?: string;
+    name?: string;
+  }>;
+}
+
+export function LaundrySectionStory({
+  role = 'admin',
+  laundryRecords = [],
+  guests = [],
+}: LaundrySectionStoryProps) {
+  const [lastAddPayload, setLastAddPayload] = React.useState('');
+
+  useLayoutEffect(() => {
+    (__setMockSession as any)({
+      data: { user: { role, email: 'test@test.com', name: 'Test User' }, expires: '2099-01-01' },
+      status: 'authenticated',
+    });
+
+    useGuestsStore.setState({
+      guests: guests as any,
+    });
+
+    useServicesStore.setState({
+      laundryRecords: laundryRecords as any,
+      updateLaundryStatus: (async () => true) as any,
+      updateLaundryBagNumber: (async () => true) as any,
+      cancelMultipleLaundry: (async () => true) as any,
+      loadFromSupabase: (async () => undefined) as any,
+      addLaundryRecord: (async (
+        guestId: string,
+        washType: string,
+        slotLabel?: string,
+        bagNumber: string = '',
+        serviceDate?: string,
+        initialStatus?: string,
+      ) => {
+        setLastAddPayload(JSON.stringify({ guestId, washType, slotLabel: slotLabel || null, bagNumber, serviceDate: serviceDate || null, initialStatus: initialStatus || null }));
+        return {
+          id: `laundry-${Date.now()}`,
+          guestId,
+          time: slotLabel || null,
+          laundryType: washType,
+          bagNumber,
+          date: serviceDate ? `${serviceDate}T12:00:00.000Z` : new Date().toISOString(),
+          dateKey: serviceDate || undefined,
+          status: initialStatus || (washType === 'offsite' ? 'pending' : 'waiting'),
+        };
+      }) as any,
+    });
+
+    useWaiverStore.setState({
+      waiverVersion: 0,
+      guestNeedsWaiverReminder: (async () => false) as any,
+      hasActiveWaiver: (async () => false) as any,
+      dismissWaiver: (async () => true) as any,
+    });
+
+    useRemindersStore.setState({
+      reminders: [],
+      getRemindersForService: (() => []) as any,
+      hasActiveReminder: (() => false) as any,
+    });
+  }, [guests, laundryRecords, role]);
+
+  return (
+    <>
+      <LaundrySection />
+      <div data-testid="last-laundry-add">{lastAddPayload}</div>
+    </>
+  );
 }

@@ -25,15 +25,26 @@ import {
     Calendar,
     ArrowUp,
     ArrowDown,
-    StickyNote
+    StickyNote,
+    Filter,
+    X,
+    Check,
+    MapPin,
+    Home,
+    UserCheck
 } from 'lucide-react';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
-import { useDonationsStore } from '@/stores/useDonationsStore';
 import { useDailyNotesStore, DailyNote } from '@/stores/useDailyNotesStore';
 import { useModalStore } from '@/stores/useModalStore';
 import { cn } from '@/lib/utils/cn';
+import { useShallow } from 'zustand/react/shallow';
+import {
+    HOUSING_STATUSES,
+    AGE_GROUPS,
+    GENDERS,
+} from '@/lib/constants/constants';
 
 // Time range presets
 const TIME_PRESETS = [
@@ -63,19 +74,81 @@ const VIEWS = [
     { id: 'demographics', label: 'Demographics', icon: Users },
 ];
 
+// Meal type options for demographics filtering
+const DEMO_MEAL_TYPE_OPTIONS = [
+    { key: 'guest', label: 'Guest Meals', color: '#3B82F6' },
+    { key: 'extras', label: 'Extra Meals', color: '#F97316' },
+    { key: 'rv', label: 'RV Meals', color: '#A855F7' },
+    { key: 'dayWorker', label: 'Day Worker', color: '#22C55E' },
+    { key: 'shelter', label: 'Shelter', color: '#EC4899' },
+    { key: 'unitedEffort', label: 'United Effort', color: '#6366F1' },
+    { key: 'lunchBags', label: 'Lunch Bags', color: '#EAB308' },
+] as const;
+
+type DemoMealTypeKey = typeof DEMO_MEAL_TYPE_OPTIONS[number]['key'];
+
+const DEMO_MEAL_TYPE_DEFAULTS: Record<DemoMealTypeKey, boolean> = {
+    guest: true, extras: true, rv: true, dayWorker: true,
+    shelter: true, unitedEffort: true, lunchBags: true,
+};
+
 export function AnalyticsSection() {
-    const { mealRecords, rvMealRecords, extraMealRecords, holidayRecords, haircutRecords } = useMealsStore();
-    const { showerRecords, laundryRecords, bicycleRecords } = useServicesStore();
-    const { guests } = useGuestsStore();
-    useDonationsStore();
-    const { getNotesForDateRange, loadFromSupabase: loadDailyNotes } = useDailyNotesStore();
-    const { openNoteModal } = useModalStore();
+    const {
+        mealRecords,
+        rvMealRecords,
+        extraMealRecords,
+        holidayRecords,
+        haircutRecords,
+        dayWorkerMealRecords,
+        shelterMealRecords,
+        unitedEffortMealRecords,
+        lunchBagRecords,
+    } = useMealsStore(
+        useShallow((s) => ({
+            mealRecords: s.mealRecords,
+            rvMealRecords: s.rvMealRecords,
+            extraMealRecords: s.extraMealRecords,
+            holidayRecords: s.holidayRecords,
+            haircutRecords: s.haircutRecords,
+            dayWorkerMealRecords: s.dayWorkerMealRecords,
+            shelterMealRecords: s.shelterMealRecords,
+            unitedEffortMealRecords: s.unitedEffortMealRecords,
+            lunchBagRecords: s.lunchBagRecords,
+        }))
+    );
+
+    const { showerRecords, laundryRecords, bicycleRecords } = useServicesStore(
+        useShallow((s) => ({
+            showerRecords: s.showerRecords,
+            laundryRecords: s.laundryRecords,
+            bicycleRecords: s.bicycleRecords,
+        }))
+    );
+
+    const guests = useGuestsStore((s) => s.guests);
+
+    const { notes, getNotesForDateRange, loadFromSupabase: loadDailyNotes } = useDailyNotesStore(
+        useShallow((s) => ({
+            notes: s.notes,
+            getNotesForDateRange: s.getNotesForDateRange,
+            loadFromSupabase: s.loadFromSupabase,
+        }))
+    );
+
+    const openNoteModal = useModalStore((s) => s.openNoteModal);
 
     const [isMounted, setIsMounted] = useState(false);
     const [activeView, setActiveView] = useState('overview');
     const [selectedPreset, setSelectedPreset] = useState('thisMonth');
     const [selectedPrograms, setSelectedPrograms] = useState(['meals', 'showers', 'laundry', 'bicycles', 'haircuts', 'holidays']);
     const [showComparison, setShowComparison] = useState(true);
+
+    // Demographic filter state
+    const [filterLocation, setFilterLocation] = useState<string>('all');
+    const [filterAgeGroup, setFilterAgeGroup] = useState<string>('all');
+    const [filterGender, setFilterGender] = useState<string>('all');
+    const [filterHousing, setFilterHousing] = useState<string>('all');
+    const [demoMealTypeFilters, setDemoMealTypeFilters] = useState(DEMO_MEAL_TYPE_DEFAULTS);
 
     // Custom date range state
     const today = new Date();
@@ -127,113 +200,202 @@ export function AnalyticsSection() {
         return d >= start && d <= end;
     }, []);
 
+    /** Count total individual repair services in a bicycle record (matches monthly summary logic). */
+    const countBicycleServices = useCallback((record: any): number => {
+        const types: string[] = record.repairTypes || (record.repairType ? [record.repairType] : []);
+        return types.length || 1; // at least 1 service per visit
+    }, []);
+
+    const dateKeyOf = useCallback((record: any) => {
+        return record?.dateKey || (typeof record?.date === 'string' ? record.date.split('T')[0] : '');
+    }, []);
+
+    const dailyCountMaps = useMemo(() => {
+        const mealsByDay = new Map<string, number>();
+        const showersDoneByDay = new Map<string, number>();
+        const laundryDoneByDay = new Map<string, number>();
+        const haircutsByDay = new Map<string, number>();
+        const bicyclesDoneByDay = new Map<string, number>();
+
+        const addToMap = (map: Map<string, number>, day: string, delta: number) => {
+            if (!day) return;
+            map.set(day, (map.get(day) || 0) + delta);
+        };
+
+        for (const r of [
+            ...mealRecords,
+            ...rvMealRecords,
+            ...extraMealRecords,
+            ...dayWorkerMealRecords,
+            ...shelterMealRecords,
+            ...unitedEffortMealRecords,
+            ...lunchBagRecords,
+        ]) {
+            addToMap(mealsByDay, dateKeyOf(r), Number(r.count) || 0);
+        }
+        for (const r of showerRecords) {
+            if (r.status === 'done') addToMap(showersDoneByDay, dateKeyOf(r), 1);
+        }
+        for (const r of laundryRecords) {
+            if (['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status)) {
+                addToMap(laundryDoneByDay, dateKeyOf(r), 1);
+            }
+        }
+        for (const r of haircutRecords || []) {
+            addToMap(haircutsByDay, dateKeyOf(r), 1);
+        }
+        for (const r of bicycleRecords) {
+            if (r.status === 'done') addToMap(bicyclesDoneByDay, dateKeyOf(r), countBicycleServices(r));
+        }
+
+        return { mealsByDay, showersDoneByDay, laundryDoneByDay, bicyclesDoneByDay, haircutsByDay };
+    }, [mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, dateKeyOf, countBicycleServices]);
+
     // Calculate metrics for the selected range
     const metrics = useMemo(() => {
         const { start, end } = dateRange;
+        const isRecordInRange = (record: { date?: string; dateKey?: string }) => isInRange(dateKeyOf(record), start, end);
 
-        const meals = [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-            .filter(r => isInRange(r.date, start, end))
+        const meals = [
+            ...mealRecords,
+            ...rvMealRecords,
+            ...extraMealRecords,
+            ...dayWorkerMealRecords,
+            ...shelterMealRecords,
+            ...unitedEffortMealRecords,
+            ...lunchBagRecords,
+        ]
+            .filter(isRecordInRange)
             .reduce((sum, r) => sum + (r.count || 0), 0);
 
         const showers = showerRecords
-            .filter(r => isInRange(r.date, start, end) && r.status === 'done')
+            .filter(r => isRecordInRange(r) && r.status === 'done')
             .length;
 
         const laundry = laundryRecords
-            .filter(r => isInRange(r.date, start, end) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status))
+            .filter(r => isRecordInRange(r) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status))
             .length;
 
-        const bicycles = bicycleRecords
-            .filter(r => isInRange(r.date, start, end) && r.status === 'done')
-            .length;
+        const doneBicycles = bicycleRecords
+            .filter(r => isRecordInRange(r) && r.status === 'done');
+        const bicycles = doneBicycles.length;
+        const bicycleServices = doneBicycles.reduce((sum, r) => sum + countBicycleServices(r), 0);
 
         const haircuts = (haircutRecords || [])
-            .filter((r: { date: string }) => isInRange(r.date, start, end))
+            .filter((r: { date: string; dateKey?: string }) => isRecordInRange(r))
             .length;
 
         const holidays = (holidayRecords || [])
-            .filter((r: { date: string }) => isInRange(r.date, start, end))
+            .filter((r: { date: string; dateKey?: string }) => isRecordInRange(r))
             .length;
 
         // Get unique guest IDs from all services
         const guestIds = new Set<string>();
-        [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-            .filter(r => isInRange(r.date, start, end))
+        [
+            ...mealRecords,
+            ...rvMealRecords,
+            ...extraMealRecords,
+            ...dayWorkerMealRecords,
+            ...shelterMealRecords,
+            ...unitedEffortMealRecords,
+            ...lunchBagRecords,
+        ]
+            .filter(isRecordInRange)
             .forEach(r => r.guestId && guestIds.add(r.guestId));
-        showerRecords.filter(r => isInRange(r.date, start, end) && r.status === 'done')
+        showerRecords.filter(r => isRecordInRange(r) && r.status === 'done')
             .forEach(r => guestIds.add(r.guestId));
-        laundryRecords.filter(r => isInRange(r.date, start, end))
+        laundryRecords.filter(r => isRecordInRange(r))
             .forEach(r => guestIds.add(r.guestId));
-        bicycleRecords.filter(r => isInRange(r.date, start, end))
+        bicycleRecords.filter(r => isRecordInRange(r) && r.status === 'done')
             .forEach(r => r.guestId && guestIds.add(r.guestId));
 
-        return { meals, showers, laundry, bicycles, haircuts, holidays, uniqueGuests: guestIds.size };
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, holidayRecords, isInRange]);
+        return { meals, showers, laundry, bicycles, bicycleServices, haircuts, holidays, uniqueGuests: guestIds.size };
+    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, haircutRecords, holidayRecords, isInRange, dateKeyOf, countBicycleServices]);
 
     // Calculate comparison metrics (previous period)
-    const comparison = useMemo(() => {
-        if (!showComparison) return null;
-
+    const prevPeriod = useMemo(() => {
         const { start, days } = dateRange;
-        const prevEnd = new Date(start);
+        const prevEnd = new Date(start + 'T12:00:00');
         prevEnd.setDate(prevEnd.getDate() - 1);
         const prevStart = new Date(prevEnd);
         prevStart.setDate(prevStart.getDate() - days + 1);
+        return {
+            start: prevStart.toISOString().split('T')[0],
+            end: prevEnd.toISOString().split('T')[0],
+        };
+    }, [dateRange]);
 
-        const pStart = prevStart.toISOString().split('T')[0];
-        const pEnd = prevEnd.toISOString().split('T')[0];
+    const comparison = useMemo(() => {
+        if (!showComparison) return null;
 
-        const prevMeals = [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-            .filter(r => isInRange(r.date, pStart, pEnd))
+        const { start: pStart, end: pEnd } = prevPeriod;
+        const isRecordInPreviousRange = (record: { date?: string; dateKey?: string }) => isInRange(dateKeyOf(record), pStart, pEnd);
+
+        const prevMeals = [
+            ...mealRecords,
+            ...rvMealRecords,
+            ...extraMealRecords,
+            ...dayWorkerMealRecords,
+            ...shelterMealRecords,
+            ...unitedEffortMealRecords,
+            ...lunchBagRecords,
+        ]
+            .filter(isRecordInPreviousRange)
             .reduce((sum, r) => sum + (r.count || 0), 0);
 
         const prevShowers = showerRecords
-            .filter(r => isInRange(r.date, pStart, pEnd) && r.status === 'done').length;
+            .filter(r => isRecordInPreviousRange(r) && r.status === 'done').length;
 
         const prevLaundry = laundryRecords
-            .filter(r => isInRange(r.date, pStart, pEnd) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status)).length;
+            .filter(r => isRecordInPreviousRange(r) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status)).length;
 
-        const prevBicycles = bicycleRecords
-            .filter(r => isInRange(r.date, pStart, pEnd) && r.status === 'done').length;
+        const prevDoneBicycles = bicycleRecords
+            .filter(r => isRecordInPreviousRange(r) && r.status === 'done');
+        const prevBicycles = prevDoneBicycles.length;
+        const prevBicycleServices = prevDoneBicycles.reduce((sum, r) => sum + countBicycleServices(r), 0);
 
         return {
             meals: metrics.meals - prevMeals,
             showers: metrics.showers - prevShowers,
             laundry: metrics.laundry - prevLaundry,
             bicycles: metrics.bicycles - prevBicycles,
+            bicycleServices: metrics.bicycleServices - prevBicycleServices,
         };
-    }, [dateRange, showComparison, metrics, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, bicycleRecords, isInRange]);
+    }, [dateRange, showComparison, metrics, prevPeriod, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords, unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords, isInRange, dateKeyOf]);
 
     // Daily breakdown for trends
     const dailyData = useMemo(() => {
-        const days: { date: string, fullDate: string, meals: number, showers: number, laundry: number, bicycles: number, hasNote: boolean }[] = [];
+        const days: { date: string, fullDate: string, meals: number, showers: number, laundry: number, bicycles: number, haircuts: number, hasNote: boolean }[] = [];
         const start = new Date(dateRange.start);
         const end = new Date(dateRange.end);
-        const notesInRange = getNotesForDateRange(dateRange.start, dateRange.end);
-        const noteDates = new Set(notesInRange.map(n => n.noteDate));
+        const noteDates = new Set(
+            (notes || [])
+                .filter((n) => n.noteDate >= dateRange.start && n.noteDate <= dateRange.end)
+                .map((n) => n.noteDate)
+        );
 
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
             const dateStr = d.toISOString().split('T')[0];
 
-            const dayMeals = [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-                .filter(r => r.date.startsWith(dateStr))
-                .reduce((sum, r) => sum + (r.count || 0), 0);
-            const dayShowers = showerRecords.filter(r => r.date.startsWith(dateStr) && r.status === 'done').length;
-            const dayLaundry = laundryRecords.filter(r => r.date.startsWith(dateStr) && ['done', 'picked_up', 'returned', 'offsite_picked_up'].includes(r.status)).length;
-            const dayBicycles = bicycleRecords.filter(r => r.date.startsWith(dateStr) && r.status === 'done').length;
+            const dayMeals = dailyCountMaps.mealsByDay.get(dateStr) || 0;
+            const dayShowers = dailyCountMaps.showersDoneByDay.get(dateStr) || 0;
+            const dayLaundry = dailyCountMaps.laundryDoneByDay.get(dateStr) || 0;
+            const dayBicycles = dailyCountMaps.bicyclesDoneByDay.get(dateStr) || 0;
+            const dayHaircuts = dailyCountMaps.haircutsByDay.get(dateStr) || 0;
 
             days.push({
-                date: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                date: `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} (${d.toLocaleDateString('en-US', { weekday: 'short' })})`,
                 fullDate: dateStr,
                 meals: dayMeals,
                 showers: dayShowers,
                 laundry: dayLaundry,
                 bicycles: dayBicycles,
+                haircuts: dayHaircuts,
                 hasNote: noteDates.has(dateStr)
             });
         }
         return days;
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, bicycleRecords, getNotesForDateRange]);
+    }, [dateRange, notes, dailyCountMaps]);
 
     // Notes summary for the selected date range
     const notesInRange = useMemo(() => {
@@ -243,15 +405,56 @@ export function AnalyticsSection() {
     // Demographics
     const demographics = useMemo(() => {
         const activeGuestIds = new Set<string>();
-        [...mealRecords, ...rvMealRecords, ...extraMealRecords]
-            .filter(r => isInRange(r.date, dateRange.start, dateRange.end))
-            .forEach(r => r.guestId && activeGuestIds.add(r.guestId));
-        showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
-            .forEach(r => activeGuestIds.add(r.guestId));
-        laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
-            .forEach(r => activeGuestIds.add(r.guestId));
 
-        const activeGuests = guests.filter(g => activeGuestIds.has(g.id));
+        // Collect guest IDs based on selected programs and meal type filters
+        const addMealGuestIds = (records: Array<{ date?: string; dateKey?: string; guestId?: string }> = []) => {
+            records
+                .filter((r) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
+                .forEach((r) => r.guestId && activeGuestIds.add(r.guestId));
+        };
+
+        // Include meal guests only when Meals program is selected
+        if (selectedPrograms.includes('meals')) {
+            if (demoMealTypeFilters.guest) addMealGuestIds(mealRecords);
+            if (demoMealTypeFilters.rv) addMealGuestIds(rvMealRecords);
+            if (demoMealTypeFilters.extras) addMealGuestIds(extraMealRecords);
+            if (demoMealTypeFilters.dayWorker) addMealGuestIds(dayWorkerMealRecords);
+            if (demoMealTypeFilters.shelter) addMealGuestIds(shelterMealRecords);
+            if (demoMealTypeFilters.unitedEffort) addMealGuestIds(unitedEffortMealRecords);
+            if (demoMealTypeFilters.lunchBags) addMealGuestIds(lunchBagRecords);
+        }
+
+        // Include service guests based on their respective program selections
+        if (selectedPrograms.includes('showers')) {
+            showerRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end) && r.status === 'done')
+                .forEach(r => activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('laundry')) {
+            laundryRecords.filter(r => isInRange(r.date, dateRange.start, dateRange.end))
+                .forEach(r => activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('bicycles')) {
+            bicycleRecords.filter(r => isInRange(dateKeyOf(r), dateRange.start, dateRange.end) && r.status !== 'cancelled')
+                .forEach(r => r.guestId && activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('haircuts')) {
+            (haircutRecords || []).filter((r: { date: string; dateKey?: string; guestId?: string }) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
+                .forEach((r: { guestId?: string }) => r.guestId && activeGuestIds.add(r.guestId));
+        }
+        if (selectedPrograms.includes('holidays')) {
+            (holidayRecords || []).filter((r: { date: string; dateKey?: string; guestId?: string }) => isInRange(dateKeyOf(r), dateRange.start, dateRange.end))
+                .forEach((r: { guestId?: string }) => r.guestId && activeGuestIds.add(r.guestId));
+        }
+
+        // Apply demographic filters to active guests
+        const activeGuests = guests.filter(g => {
+            if (!activeGuestIds.has(g.id)) return false;
+            if (filterLocation !== 'all' && (g.location || 'Unknown') !== filterLocation) return false;
+            if (filterAgeGroup !== 'all' && (g.age || 'Unknown') !== filterAgeGroup) return false;
+            if (filterGender !== 'all' && (g.gender || 'Unknown') !== filterGender) return false;
+            if (filterHousing !== 'all' && (g.housingStatus || 'Unknown') !== filterHousing) return false;
+            return true;
+        });
 
         const housingCounts: Record<string, number> = {};
         const ageCounts: Record<string, number> = {};
@@ -277,13 +480,49 @@ export function AnalyticsSection() {
             locationCounts,
             total: activeGuests.length
         };
-    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, showerRecords, laundryRecords, guests, isInRange]);
+    }, [dateRange, mealRecords, rvMealRecords, extraMealRecords, dayWorkerMealRecords, shelterMealRecords,
+        unitedEffortMealRecords, lunchBagRecords, showerRecords, laundryRecords, bicycleRecords,
+        haircutRecords, holidayRecords, guests, isInRange, dateKeyOf, selectedPrograms,
+        demoMealTypeFilters, filterLocation, filterAgeGroup, filterGender, filterHousing]);
+
+    // Unique locations from all guests for the filter dropdown
+    const locationOptions = useMemo(() => {
+        const locs = new Set<string>();
+        guests.forEach(g => {
+            if (g.location) locs.add(g.location);
+        });
+        return Array.from(locs).sort();
+    }, [guests]);
 
     const toggleProgram = (id: string) => {
         setSelectedPrograms(prev =>
             prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
         );
     };
+
+    const toggleDemoMealType = useCallback((key: DemoMealTypeKey) => {
+        setDemoMealTypeFilters(prev => ({ ...prev, [key]: !prev[key] }));
+    }, []);
+
+    const selectAllDemoMealTypes = useCallback(() => {
+        setDemoMealTypeFilters(DEMO_MEAL_TYPE_DEFAULTS);
+    }, []);
+
+    const clearDemoMealTypes = useCallback(() => {
+        setDemoMealTypeFilters(Object.fromEntries(
+            DEMO_MEAL_TYPE_OPTIONS.map(o => [o.key, false])
+        ) as Record<DemoMealTypeKey, boolean>);
+    }, []);
+
+    const clearDemographicFilters = useCallback(() => {
+        setFilterLocation('all');
+        setFilterAgeGroup('all');
+        setFilterGender('all');
+        setFilterHousing('all');
+    }, []);
+
+    const hasActiveDemoFilters = filterLocation !== 'all' || filterAgeGroup !== 'all' || filterGender !== 'all' || filterHousing !== 'all';
+    const hasActiveMealTypeFilters = Object.values(demoMealTypeFilters).some(v => !v);
 
     const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899'];
 
@@ -346,11 +585,15 @@ export function AnalyticsSection() {
                             <Bike size={18} />
                             <span className="font-bold text-xs uppercase tracking-wider">Bicycles</span>
                         </div>
-                        <p className="text-3xl font-black text-emerald-900">{metrics.bicycles.toLocaleString()}</p>
+                        <div className="flex items-baseline gap-1.5">
+                            <p className="text-3xl font-black text-emerald-900">{metrics.bicycleServices.toLocaleString()}</p>
+                            <span className="text-xs font-bold text-emerald-600/70">services</span>
+                        </div>
+                        <p className="text-xs text-emerald-700/60 font-medium mt-0.5">{metrics.bicycles.toLocaleString()} {metrics.bicycles === 1 ? 'visit' : 'visits'}</p>
                         {comparison && (
-                            <div className={cn("flex items-center gap-1 mt-2 text-xs font-bold", comparison.bicycles >= 0 ? "text-emerald-600" : "text-red-600")}>
-                                {comparison.bicycles >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-                                {Math.abs(comparison.bicycles)} vs prev
+                            <div className={cn("flex items-center gap-1 mt-2 text-xs font-bold", comparison.bicycleServices >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                {comparison.bicycleServices >= 0 ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                                {Math.abs(comparison.bicycleServices)} vs prev
                             </div>
                         )}
                     </div>
@@ -444,7 +687,7 @@ export function AnalyticsSection() {
         const dayNotes = fullDate ? getNotesForDateRange(fullDate, fullDate) : [];
 
         return (
-            <div className="bg-white/95 backdrop-blur-sm p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm min-w-[180px]">
+            <div className="bg-white p-4 border border-gray-200 shadow-xl rounded-xl z-50 text-sm min-w-[180px]">
                 <p className="font-bold text-gray-800 mb-2 flex items-center gap-2">
                     {label}
                     {dataPoint?.hasNote && <StickyNote size={12} className="text-amber-500" />}
@@ -484,7 +727,7 @@ export function AnalyticsSection() {
                         </span>
                     )}
                 </h3>
-                <div className="h-[400px] w-full">
+                <div className="h-[300px] md:h-[400px] w-full">
                     {isMounted && dailyData.length > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={dailyData}>
@@ -501,9 +744,17 @@ export function AnalyticsSection() {
                                         <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
                                         <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
                                     </linearGradient>
+                                    <linearGradient id="colorBicycles" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorHaircuts" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                                    </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
+                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} interval="preserveStartEnd" angle={-45} textAnchor="end" height={60} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
                                 <Tooltip content={<CustomChartTooltip />} />
                                 <Legend />
@@ -515,6 +766,12 @@ export function AnalyticsSection() {
                                 )}
                                 {selectedPrograms.includes('laundry') && (
                                     <Area type="monotone" dataKey="laundry" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorLaundry)" />
+                                )}
+                                {selectedPrograms.includes('bicycles') && (
+                                    <Area type="monotone" dataKey="bicycles" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorBicycles)" />
+                                )}
+                                {selectedPrograms.includes('haircuts') && (
+                                    <Area type="monotone" dataKey="haircuts" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorHaircuts)" />
                                 )}
                             </AreaChart>
                         </ResponsiveContainer>
@@ -531,6 +788,183 @@ export function AnalyticsSection() {
     // Render Demographics
     const renderDemographics = () => (
         <div className="space-y-6">
+            {/* Meal Type Filters — only visible when Meals program is selected */}
+            {selectedPrograms.includes('meals') && <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <Utensils size={16} className="text-gray-400" />
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Meal Types</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={selectAllDemoMealTypes} className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                            <Check size={12} /> All
+                        </button>
+                        <button onClick={clearDemoMealTypes} className="text-xs text-gray-400 hover:underline flex items-center gap-1 font-medium">
+                            <X size={12} /> Clear
+                        </button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    {DEMO_MEAL_TYPE_OPTIONS.map(type => {
+                        const isSelected = demoMealTypeFilters[type.key];
+                        return (
+                            <button
+                                key={type.key}
+                                onClick={() => toggleDemoMealType(type.key)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
+                                    isSelected
+                                        ? "text-white border-transparent"
+                                        : "bg-white text-gray-400 border-gray-200"
+                                )}
+                                style={isSelected ? { backgroundColor: type.color } : {}}
+                            >
+                                {type.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>}
+
+            {/* Demographic Filters */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Filter size={16} className="text-gray-400" />
+                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Demographic Filters</p>
+                    </div>
+                    {hasActiveDemoFilters && (
+                        <button
+                            onClick={clearDemographicFilters}
+                            className="text-xs text-red-500 hover:underline flex items-center gap-1 font-medium"
+                        >
+                            <X size={12} /> Clear Filters
+                        </button>
+                    )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Location Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <MapPin size={12} /> Location
+                        </label>
+                        <select
+                            value={filterLocation}
+                            onChange={e => setFilterLocation(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterLocation !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Locations</option>
+                            {locationOptions.map(loc => (
+                                <option key={loc} value={loc}>{loc}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+
+                    {/* Age Group Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <Users size={12} /> Age Group
+                        </label>
+                        <select
+                            value={filterAgeGroup}
+                            onChange={e => setFilterAgeGroup(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterAgeGroup !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Age Groups</option>
+                            {AGE_GROUPS.map(ag => (
+                                <option key={ag} value={ag}>{ag}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+
+                    {/* Gender Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <UserCheck size={12} /> Gender
+                        </label>
+                        <select
+                            value={filterGender}
+                            onChange={e => setFilterGender(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterGender !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Genders</option>
+                            {GENDERS.map(g => (
+                                <option key={g} value={g}>{g}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Housing Status Filter */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            <Home size={12} /> Housing Status
+                        </label>
+                        <select
+                            value={filterHousing}
+                            onChange={e => setFilterHousing(e.target.value)}
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors",
+                                filterHousing !== 'all'
+                                    ? "border-blue-300 bg-blue-50 text-blue-700"
+                                    : "border-gray-200 bg-white text-gray-700"
+                            )}
+                        >
+                            <option value="all">All Statuses</option>
+                            {HOUSING_STATUSES.map(hs => (
+                                <option key={hs} value={hs}>{hs}</option>
+                            ))}
+                            <option value="Unknown">Unknown</option>
+                        </select>
+                    </div>
+                </div>
+                {(hasActiveDemoFilters || hasActiveMealTypeFilters) && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {filterLocation !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <MapPin size={10} /> {filterLocation}
+                                <button onClick={() => setFilterLocation('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterAgeGroup !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <Users size={10} /> {filterAgeGroup}
+                                <button onClick={() => setFilterAgeGroup('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterGender !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <UserCheck size={10} /> {filterGender}
+                                <button onClick={() => setFilterGender('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                        {filterHousing !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                <Home size={10} /> {filterHousing}
+                                <button onClick={() => setFilterHousing('all')} className="ml-0.5 hover:text-blue-900"><X size={10} /></button>
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Demographics Results */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                     <Users size={20} className="text-indigo-600" />
@@ -544,7 +978,15 @@ export function AnalyticsSection() {
                     <div className="text-center py-12 text-gray-500">
                         <Users size={48} className="mx-auto mb-4 text-gray-300" />
                         <p className="font-medium">No guests found for the selected filters.</p>
-                        <p className="text-sm mt-1">Try expanding the date range.</p>
+                        <p className="text-sm mt-1">Try expanding the date range or adjusting filters.</p>
+                        {hasActiveDemoFilters && (
+                            <button
+                                onClick={clearDemographicFilters}
+                                className="mt-4 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                            >
+                                Clear Demographic Filters
+                            </button>
+                        )}
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -572,6 +1014,9 @@ export function AnalyticsSection() {
                                                 </div>
                                             </div>
                                         ))}
+                                        {entries.length > 5 && (
+                                            <p className="text-xs text-gray-400 pt-1">+{entries.length - 5} more</p>
+                                        )}
                                     </div>
                                 </div>
                             );
@@ -655,9 +1100,11 @@ export function AnalyticsSection() {
                         />
                         Compare to previous period
                     </label>
-                    <span className="text-xs text-gray-400">
-                        {new Date(dateRange.start).toLocaleDateString()} — {new Date(dateRange.end).toLocaleDateString()}
-                    </span>
+                    {showComparison && (
+                        <span className="text-xs text-gray-400">
+                            {new Date(prevPeriod.start + 'T12:00:00').toLocaleDateString()} — {new Date(prevPeriod.end + 'T12:00:00').toLocaleDateString()}
+                        </span>
+                    )}
                 </div>
             </div>
 

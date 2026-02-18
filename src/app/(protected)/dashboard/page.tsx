@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import {
     BarChart3,
-    Home,
     Download,
     Activity,
     Utensils,
@@ -11,7 +10,7 @@ import {
     FileText
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { DashboardOverview } from '@/components/admin/DashboardOverview';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { AnalyticsSection } from '@/components/admin/AnalyticsSection';
 import { DataExportSection } from '@/components/admin/DataExportSection';
 import { MealReport } from '@/components/admin/reports/MealReport';
@@ -24,7 +23,6 @@ import { useGuestsStore } from '@/stores/useGuestsStore';
 import { cn } from '@/lib/utils/cn';
 
 const DASHBOARD_TABS = [
-    { id: 'overview', label: 'Overview', icon: Home, color: 'text-indigo-600' },
     { id: 'analytics', label: 'Analytics', icon: Activity, color: 'text-blue-600' },
     { id: 'monthly-report', label: 'Monthly Report', icon: FileText, color: 'text-purple-600' },
     { id: 'meal-report', label: 'Meal Report', icon: Utensils, color: 'text-orange-600' },
@@ -33,7 +31,8 @@ const DASHBOARD_TABS = [
 ];
 
 export default function DashboardPage() {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('analytics');
+    const prefersReducedMotion = useReducedMotion();
     const { loadSettings } = useSettingsStore();
     const { loadFromSupabase: loadMeals } = useMealsStore();
     const { loadFromSupabase: loadServices } = useServicesStore();
@@ -48,13 +47,12 @@ export default function DashboardPage() {
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'overview': return <DashboardOverview />;
             case 'analytics': return <AnalyticsSection />;
             case 'monthly-report': return <MonthlyReportGenerator />;
             case 'meal-report': return <MealReport />;
             case 'monthly-summary': return <MonthlySummaryReport />;
             case 'export': return <DataExportSection />;
-            default: return <DashboardOverview />;
+            default: return <AnalyticsSection />;
         }
     };
 
@@ -69,14 +67,14 @@ export default function DashboardPage() {
                         </div>
                         <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Administration Console</span>
                     </div>
-                    <h1 className="text-4xl font-black text-gray-900 tracking-tight">Mission Intelligence</h1>
+                    <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight">Mission Intelligence</h1>
                     <p className="text-gray-500 font-medium mt-2 max-w-xl">
                         Strategic oversight for Hope&apos;s Corner. Monitor metrics, analyze community trends, and manage operational targets.
                     </p>
                 </div>
 
-                {/* Tab Switcher */}
-                <div className="flex p-1.5 bg-gray-100 rounded-2xl gap-1">
+                {/* Desktop Tab Switcher */}
+                <div className="hidden lg:flex p-1.5 bg-gray-100 rounded-2xl gap-1">
                     {DASHBOARD_TABS.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
@@ -101,12 +99,35 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            {/* Mobile/Tablet Tab Switcher */}
+            <div className="lg:hidden flex overflow-x-auto gap-2 pb-2 scrollbar-hide -mx-4 px-4">
+                {DASHBOARD_TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={cn(
+                                "flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-black transition-all border",
+                                isActive
+                                    ? "bg-gray-900 text-white border-gray-900 shadow-lg"
+                                    : "bg-white text-gray-500 border-gray-100"
+                            )}
+                        >
+                            <Icon size={18} />
+                            {tab.label}
+                        </button>
+                    );
+                })}
+            </div>
+
             {/* Main Content Area */}
             <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, scale: 0.98 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, ease: [0.19, 1, 0.22, 1] }}
+                transition={{ duration: prefersReducedMotion ? 0 : 0.4, ease: [0.19, 1, 0.22, 1] }}
             >
                 {renderContent()}
             </motion.div>
