@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import {
     BarChart3,
@@ -34,9 +34,18 @@ const DASHBOARD_TABS = [
     { id: 'export', label: 'Data Export', icon: Download, color: 'text-gray-600' },
 ];
 
+const REPORT_TAB_IDS = new Set(['monthly-report', 'meal-report', 'monthly-summary', 'export']);
+// Keep dashboard/report data accurate for 2025+ while avoiding expensive all-time fetches.
+const REPORT_BASELINE_YEAR = 2025;
+
 export default function DashboardPage() {
     const [activeTab, setActiveTab] = useState('analytics');
+    const currentYear = new Date().getFullYear();
+    const [preloadYear, setPreloadYear] = useState(currentYear);
+    const [loadedReportYears, setLoadedReportYears] = useState<Set<number>>(() => new Set());
+    const [isPreparingReports, setIsPreparingReports] = useState(false);
     const firstTabSwitchMarkRef = useRef(false);
+    const preloadingYearRef = useRef<number | null>(null);
     const prefersReducedMotion = useReducedMotion();
     const markPerf = useCallback((name: string) => {
         if (typeof performance === 'undefined') return;
@@ -46,14 +55,54 @@ export default function DashboardPage() {
     const ensureMealsLoaded = useMealsStore((s) => s.ensureLoaded);
     const ensureServicesLoaded = useServicesStore((s) => s.ensureLoaded);
     const ensureGuestsLoaded = useGuestsStore((s) => s.ensureLoaded);
+    const preloadYearOptions = useMemo(() => {
+        const years = new Set<number>([currentYear, currentYear - 1, REPORT_BASELINE_YEAR]);
+        return Array.from(years).filter((year) => year >= REPORT_BASELINE_YEAR).sort((a, b) => b - a);
+    }, [currentYear]);
+
+    const preloadReportsForYear = useCallback(async (year: number) => {
+        if (loadedReportYears.has(year)) return;
+        if (preloadingYearRef.current === year) return;
+
+        preloadingYearRef.current = year;
+        setIsPreparingReports(true);
+        try {
+            // Always include baseline year data to preserve 2025 and current-month accuracy.
+            const sinceYear = Math.min(year, REPORT_BASELINE_YEAR);
+            const since = `${sinceYear}-01-01T00:00:00.000Z`;
+            await Promise.all([
+                ensureMealsLoaded({ force: true, since }),
+                ensureServicesLoaded({ force: true, since }),
+            ]);
+            setLoadedReportYears((prev) => {
+                const next = new Set(prev);
+                next.add(year);
+                return next;
+            });
+        } finally {
+            preloadingYearRef.current = null;
+            setIsPreparingReports(false);
+        }
+    }, [ensureMealsLoaded, ensureServicesLoaded, loadedReportYears]);
 
     useEffect(() => {
         loadSettings();
-        // Reports require full history; override operational default window.
-        ensureMealsLoaded({ force: true, since: '1970-01-01T00:00:00.000Z' });
-        ensureServicesLoaded({ force: true, since: '1970-01-01T00:00:00.000Z' });
+        // Load operational window first for a fast dashboard open.
+        ensureMealsLoaded();
+        ensureServicesLoaded();
         ensureGuestsLoaded();
     }, [loadSettings, ensureMealsLoaded, ensureServicesLoaded, ensureGuestsLoaded]);
+
+    useEffect(() => {
+        // Warm selected year's report window in the background.
+        preloadReportsForYear(preloadYear);
+    }, [preloadYear, preloadReportsForYear]);
+
+    useEffect(() => {
+        if (!REPORT_TAB_IDS.has(activeTab)) return;
+        // Ensure selected year's report data is ready when opening report tabs.
+        preloadReportsForYear(preloadYear);
+    }, [activeTab, preloadYear, preloadReportsForYear]);
 
     const handleTabChange = (tabId: string) => {
         if (!firstTabSwitchMarkRef.current) {
@@ -64,6 +113,16 @@ export default function DashboardPage() {
     };
 
     const renderContent = () => {
+        if (REPORT_TAB_IDS.has(activeTab) && (isPreparingReports || !loadedReportYears.has(preloadYear))) {
+            return (
+                <div className="space-y-4">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                        Preparing {preloadYear} report data. This can take a moment.
+                    </div>
+                    <TabSkeleton />
+                </div>
+            );
+        }
         switch (activeTab) {
             case 'analytics': return <AnalyticsSection />;
             case 'monthly-report': return <MonthlyReportGenerator />;
@@ -92,7 +151,23 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Desktop Tab Switcher */}
-                <div className="hidden lg:flex p-1.5 bg-gray-100 rounded-2xl gap-1">
+                <div className="hidden lg:flex items-center gap-3">
+                    <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
+                        <label htmlFor="report-preload-year" className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            Report Year
+                        </label>
+                        <select
+                            id="report-preload-year"
+                            value={preloadYear}
+                            onChange={(e) => setPreloadYear(Number(e.target.value))}
+                            className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-semibold text-gray-700 outline-none focus:border-emerald-500"
+                        >
+                            {preloadYearOptions.map((year) => (
+                                <option key={year} value={year}>{year}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex p-1.5 bg-gray-100 rounded-2xl gap-1">
                     {DASHBOARD_TABS.map((tab) => {
                         const Icon = tab.icon;
                         const isActive = activeTab === tab.id;
@@ -114,10 +189,26 @@ export default function DashboardPage() {
                             </button>
                         );
                     })}
+                    </div>
                 </div>
             </div>
 
             {/* Mobile/Tablet Tab Switcher */}
+            <div className="lg:hidden flex items-center gap-2 pb-2 -mx-4 px-4">
+                <label htmlFor="report-preload-year-mobile" className="text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                    Report Year
+                </label>
+                <select
+                    id="report-preload-year-mobile"
+                    value={preloadYear}
+                    onChange={(e) => setPreloadYear(Number(e.target.value))}
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-semibold text-gray-700 outline-none focus:border-emerald-500"
+                >
+                    {preloadYearOptions.map((year) => (
+                        <option key={year} value={year}>{year}</option>
+                    ))}
+                </select>
+            </div>
             <div className="lg:hidden flex overflow-x-auto gap-2 pb-2 scrollbar-hide -mx-4 px-4">
                 {DASHBOARD_TABS.map((tab) => {
                     const Icon = tab.icon;

@@ -23,6 +23,13 @@ import { cn } from '@/lib/utils/cn';
 import toast from 'react-hot-toast';
 import { useShallow } from 'zustand/react/shallow';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import { useSecretTap } from '@/hooks/useSecretTap';
+import dynamic from 'next/dynamic';
+
+const PinballGame = dynamic(
+  () => import('@/components/checkin/PinballGame').then((m) => m.PinballGame),
+  { ssr: false },
+);
 
 // Threshold for disabling animations for better performance
 const LARGE_LIST_THRESHOLD = 20;
@@ -46,6 +53,8 @@ export default function CheckInPage() {
     const firstSearchMarkRef = useRef(false);
     const firstCreateModalMarkRef = useRef(false);
     const prefersReducedMotion = useReducedMotion();
+    const [showPinball, setShowPinball] = useState(false);
+    const handleSecretTap = useSecretTap(() => setShowPinball(true));
 
     const markPerf = useCallback((name: string) => {
         if (typeof performance === 'undefined') return;
@@ -344,7 +353,10 @@ export default function CheckInPage() {
             {/* Header with Stats */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Check-In</h1>
+                    <h1
+                        className="text-2xl font-bold text-gray-900 select-none"
+                        onClick={handleSecretTap}
+                    >Check-In</h1>
                     <p className="text-sm text-gray-500 hidden md:block">
                         {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                     </p>
@@ -645,6 +657,13 @@ export default function CheckInPage() {
                         initialName={searchQuery}
                         defaultLocation={defaultLocation}
                     />
+                )}
+            </AnimatePresence>
+
+            {/* Hidden pinball Easter egg */}
+            <AnimatePresence>
+                {showPinball && (
+                    <PinballGame onClose={() => setShowPinball(false)} />
                 )}
             </AnimatePresence>
         </div>
