@@ -115,12 +115,68 @@ export default function DashboardPage() {
     const renderContent = () => {
         if (REPORT_TAB_IDS.has(activeTab) && (isPreparingReports || !loadedReportYears.has(preloadYear))) {
             return (
-                <div className="space-y-4">
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-                        Preparing {preloadYear} report data. This can take a moment.
+                <motion.div
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-emerald-50 px-6 py-8 md:px-10 md:py-12"
+                >
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.12),transparent_45%),radial-gradient(circle_at_80%_30%,rgba(16,185,129,0.12),transparent_40%)]" />
+
+                    <div className="relative mx-auto max-w-2xl space-y-6 text-center">
+                        <motion.div
+                            animate={prefersReducedMotion ? undefined : { rotate: 360 }}
+                            transition={prefersReducedMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'linear' }}
+                            className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border-4 border-indigo-200 border-t-indigo-600 bg-white shadow-lg"
+                        >
+                            <FileText size={28} className="text-indigo-600" />
+                        </motion.div>
+
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-black text-gray-900 md:text-2xl">
+                                Preparing {preloadYear} Report Data
+                            </h3>
+                            <p className="mx-auto max-w-xl text-sm font-medium text-gray-600 md:text-base">
+                                Pulling historical records and computing summaries. Your report tabs will open immediately once this finishes.
+                            </p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="h-3 overflow-hidden rounded-full bg-white/80 shadow-inner">
+                                <motion.div
+                                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500"
+                                    animate={prefersReducedMotion ? { width: '65%' } : { x: ['-40%', '110%'] }}
+                                    transition={prefersReducedMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                                    style={{ width: '45%' }}
+                                />
+                            </div>
+                            <div className="flex justify-center gap-2">
+                                {[0, 1, 2].map((dot) => (
+                                    <motion.span
+                                        key={dot}
+                                        className="h-2.5 w-2.5 rounded-full bg-indigo-500"
+                                        animate={prefersReducedMotion ? undefined : { opacity: [0.25, 1, 0.25], y: [0, -4, 0] }}
+                                        transition={prefersReducedMotion ? undefined : { duration: 0.9, repeat: Infinity, delay: dot * 0.15 }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
+                            <div className="rounded-xl border border-white/70 bg-white/70 p-3 text-left">
+                                <p className="text-[11px] font-black uppercase tracking-wider text-indigo-500">Step 1</p>
+                                <p className="text-sm font-semibold text-gray-700">Load Meal Records</p>
+                            </div>
+                            <div className="rounded-xl border border-white/70 bg-white/70 p-3 text-left">
+                                <p className="text-[11px] font-black uppercase tracking-wider text-indigo-500">Step 2</p>
+                                <p className="text-sm font-semibold text-gray-700">Load Service Records</p>
+                            </div>
+                            <div className="rounded-xl border border-white/70 bg-white/70 p-3 text-left">
+                                <p className="text-[11px] font-black uppercase tracking-wider text-indigo-500">Step 3</p>
+                                <p className="text-sm font-semibold text-gray-700">Build Summaries</p>
+                            </div>
+                        </div>
                     </div>
-                    <TabSkeleton />
-                </div>
+                </motion.div>
             );
         }
         switch (activeTab) {

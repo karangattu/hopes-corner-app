@@ -44,7 +44,6 @@ const BUMPER_BOUNCE = 6;
 const WALL_LEFT = 20;
 const WALL_RIGHT = WIDTH - 20;
 const DRAIN_Y = HEIGHT - 30;
-const LAUNCH_X = WIDTH - 30;
 
 // --- Helpers ---
 function clamp(v: number, min: number, max: number) {
@@ -73,7 +72,14 @@ function createFlippers(): [Flipper, Flipper] {
 }
 
 function resetBall(): Ball {
-  return { x: LAUNCH_X, y: HEIGHT - 60, vx: 0, vy: -8 - Math.random() * 3, r: BALL_RADIUS };
+  // Drop from center-top with slight random drift so it bounces through bumpers
+  return {
+    x: WIDTH / 2 + (Math.random() - 0.5) * 80,
+    y: 30,
+    vx: (Math.random() - 0.5) * 2,
+    vy: 2,
+    r: BALL_RADIUS,
+  };
 }
 
 // --- Component ---
@@ -205,6 +211,35 @@ export function PinballGame({ onClose }: PinballGameProps) {
         ball.vy = Math.abs(ball.vy) * 0.8;
       }
 
+      // Guide wall collisions (angled walls that funnel ball toward flippers)
+      const guideWalls = [
+        // Left guide: from (WALL_LEFT, DRAIN_Y-80) to (WALL_LEFT+40, DRAIN_Y-20)
+        { x1: WALL_LEFT, y1: DRAIN_Y - 80, x2: WALL_LEFT + 40, y2: DRAIN_Y - 20 },
+        // Right guide: from (WALL_RIGHT, DRAIN_Y-80) to (WALL_RIGHT-40, DRAIN_Y-20)
+        { x1: WALL_RIGHT, y1: DRAIN_Y - 80, x2: WALL_RIGHT - 40, y2: DRAIN_Y - 20 },
+      ];
+      for (const w of guideWalls) {
+        const wdx = w.x2 - w.x1;
+        const wdy = w.y2 - w.y1;
+        const wlen2 = wdx * wdx + wdy * wdy;
+        let wt = ((ball.x - w.x1) * wdx + (ball.y - w.y1) * wdy) / wlen2;
+        wt = clamp(wt, 0, 1);
+        const cx = w.x1 + wt * wdx;
+        const cy = w.y1 + wt * wdy;
+        const wd = dist(ball.x, ball.y, cx, cy);
+        if (wd < ball.r + 3) {
+          const wnx = (ball.x - cx) / (wd || 1);
+          const wny = (ball.y - cy) / (wd || 1);
+          ball.x = cx + wnx * (ball.r + 4);
+          ball.y = cy + wny * (ball.r + 4);
+          const wdot = ball.vx * wnx + ball.vy * wny;
+          ball.vx -= 2 * wdot * wnx;
+          ball.vy -= 2 * wdot * wny;
+          ball.vx *= 0.85;
+          ball.vy *= 0.85;
+        }
+      }
+
       // Bumper collisions
       for (const b of bumpers) {
         const d = dist(ball.x, ball.y, b.x, b.y);
@@ -294,15 +329,19 @@ export function PinballGame({ onClose }: PinballGameProps) {
       ctx.lineTo(WALL_RIGHT, 10);
       ctx.stroke();
 
-      // Launch lane
+      // Guide walls (funnel toward flippers)
       ctx.strokeStyle = '#475569';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 2;
+      // Left guide: angled wall from lower-left toward left flipper
       ctx.beginPath();
-      ctx.moveTo(LAUNCH_X, HEIGHT - 80);
-      ctx.lineTo(LAUNCH_X, 30);
+      ctx.moveTo(WALL_LEFT, DRAIN_Y - 80);
+      ctx.lineTo(WALL_LEFT + 40, DRAIN_Y - 20);
       ctx.stroke();
-      ctx.setLineDash([]);
+      // Right guide: angled wall from lower-right toward right flipper
+      ctx.beginPath();
+      ctx.moveTo(WALL_RIGHT, DRAIN_Y - 80);
+      ctx.lineTo(WALL_RIGHT - 40, DRAIN_Y - 20);
+      ctx.stroke();
 
       // Bumpers
       for (const b of bumpers) {
