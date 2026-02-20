@@ -260,9 +260,10 @@ export function LaundryBookingModal() {
                                         <div className="text-left flex-1">
                                             <h3 className="text-sm font-black text-gray-900">Book Next Available Slot</h3>
                                             {nextAvailableSlot ? (
-                                                <p className="text-xs text-gray-500 font-medium mt-0.5">
-                                                    Next open: <span className="text-indigo-600 font-bold">{formatSlotLabel(nextAvailableSlot.label)}</span>
-                                                </p>
+                                                <>
+                                                    <p className="text-xs text-gray-500 font-medium mt-0.5">Next open:</p>
+                                                    <p className="text-2xl font-black text-indigo-600 tracking-tight leading-tight">{formatSlotLabel(nextAvailableSlot.label)}</p>
+                                                </>
                                             ) : (
                                                 <p className="text-xs text-amber-600 font-bold mt-0.5">All on-site slots are booked</p>
                                             )}

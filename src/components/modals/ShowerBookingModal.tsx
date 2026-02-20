@@ -214,9 +214,10 @@ export function ShowerBookingModal() {
                                 <div className="text-left flex-1">
                                     <h3 className="text-sm font-black text-gray-900">Book Next Available Slot</h3>
                                     {nextAvailableSlot ? (
-                                        <p className="text-xs text-gray-500 font-medium mt-0.5">
-                                            Next open: <span className="text-sky-600 font-bold">{nextAvailableSlot.label}</span>
-                                        </p>
+                                        <>
+                                            <p className="text-xs text-gray-500 font-medium mt-0.5">Next open:</p>
+                                            <p className="text-2xl font-black text-sky-600 tracking-tight leading-tight">{nextAvailableSlot.label}</p>
+                                        </>
                                     ) : (
                                         <p className="text-xs text-amber-600 font-bold mt-0.5">All slots are full for today</p>
                                     )}

@@ -143,6 +143,18 @@ describe('ShowerBookingModal — Book Next Available', () => {
         render(<ShowerBookingModal />);
         expect(screen.getByText('Add to Waitlist')).toBeDefined();
     });
+
+    it('displays next open time prominently with large text for readability', () => {
+        render(<ShowerBookingModal />);
+        // "Next open:" is now on its own line as a label
+        const nextOpenLabel = screen.getByText('Next open:');
+        expect(nextOpenLabel.tagName).toBe('P');
+        // The time is rendered in a separate large element
+        const timeElement = nextOpenLabel.nextElementSibling;
+        expect(timeElement).toBeTruthy();
+        expect(timeElement!.className).toContain('text-2xl');
+        expect(timeElement!.className).toContain('font-black');
+    });
 });
 
 describe('LaundryBookingModal — Book Next Available', () => {
@@ -209,5 +221,15 @@ describe('LaundryBookingModal — Book Next Available', () => {
         expect(screen.getByText('Book Next Available Slot')).toBeDefined();
         expect(screen.getByText(/Next open:/)).toBeDefined();
         expect(screen.getAllByText('7:30 AM - 8:30 AM').length).toBeGreaterThan(0);
+    });
+
+    it('displays next open time prominently with large text for readability', () => {
+        render(<LaundryBookingModal />);
+        const nextOpenLabel = screen.getByText('Next open:');
+        expect(nextOpenLabel.tagName).toBe('P');
+        const timeElement = nextOpenLabel.nextElementSibling;
+        expect(timeElement).toBeTruthy();
+        expect(timeElement!.className).toContain('text-2xl');
+        expect(timeElement!.className).toContain('font-black');
     });
 });
