@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { PinballGame } from '../PinballGame';
@@ -17,11 +17,25 @@ vi.mock('lucide-react', () => ({
 }));
 
 describe('PinballGame', () => {
-  let onClose: ReturnType<typeof vi.fn>;
+  let onClose: () => void;
+  const originalDateNow = Date.now;
 
   beforeEach(() => {
     onClose = vi.fn();
     vi.clearAllMocks();
+    // Override Date.now to simulate time past the grace period
+    let callCount = 0;
+    const baseTime = 1000000;
+    Date.now = () => {
+      callCount++;
+      // First call is mount (openedAtRef), subsequent calls are close attempts
+      // Return 600ms later for close calls so they're past the 500ms grace period
+      return callCount <= 1 ? baseTime : baseTime + 600;
+    };
+  });
+
+  afterEach(() => {
+    Date.now = originalDateNow;
   });
 
   it('renders the pinball overlay with canvas', () => {
@@ -61,5 +75,14 @@ describe('PinballGame', () => {
   it('renders controls hint text', () => {
     render(<PinballGame onClose={onClose} />);
     expect(screen.getByText(/ESC to close/)).toBeDefined();
+  });
+
+  it('ignores backdrop clicks during the 500ms grace period', () => {
+    // Override Date.now so all calls return the same time (within grace period)
+    const baseTime = 2000000;
+    Date.now = () => baseTime;
+    render(<PinballGame onClose={onClose} />);
+    fireEvent.click(screen.getByTestId('pinball-backdrop'));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

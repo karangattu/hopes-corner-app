@@ -99,6 +99,17 @@ export function PinballGame({ onClose }: PinballGameProps) {
   const ballsLeftRef = useRef(3);
   const [gameOver, setGameOver] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
+  const openedAtRef = useRef(0);
+
+  // Capture open time on mount
+  useEffect(() => {
+    openedAtRef.current = Date.now();
+  }, []);
+
+  // Ignore clicks for 500ms after open so momentum taps from the trigger don't dismiss
+  const safeClose = useCallback(() => {
+    if (Date.now() - openedAtRef.current > 500) onClose();
+  }, [onClose]);
 
   // Escape to close
   useEffect(() => {
@@ -424,7 +435,7 @@ export function PinballGame({ onClose }: PinballGameProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
+        onClick={safeClose}
         data-testid="pinball-backdrop"
       />
 
@@ -438,7 +449,7 @@ export function PinballGame({ onClose }: PinballGameProps) {
       >
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={safeClose}
           className="absolute top-2 right-2 z-20 p-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
           aria-label="Close pinball game"
           data-testid="pinball-close"
