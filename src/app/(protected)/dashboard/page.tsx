@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
     BarChart3,
     Download,
@@ -11,16 +12,19 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { AnalyticsSection } from '@/components/admin/AnalyticsSection';
-import { DataExportSection } from '@/components/admin/DataExportSection';
-import { MealReport } from '@/components/admin/reports/MealReport';
-import MonthlySummaryReport from '@/components/admin/reports/MonthlySummaryReport';
-import MonthlyReportGenerator from '@/components/admin/reports/MonthlyReportGenerator';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
 import { useServicesStore } from '@/stores/useServicesStore';
 import { useGuestsStore } from '@/stores/useGuestsStore';
 import { cn } from '@/lib/utils/cn';
+import { useCallback, useRef } from 'react';
+
+const TabSkeleton = () => <div className="h-80 w-full animate-pulse rounded-2xl bg-gray-100" />;
+const AnalyticsSection = dynamic(() => import('@/components/admin/AnalyticsSection').then((m) => m.AnalyticsSection), { loading: TabSkeleton });
+const DataExportSection = dynamic(() => import('@/components/admin/DataExportSection').then((m) => m.DataExportSection), { loading: TabSkeleton });
+const MealReport = dynamic(() => import('@/components/admin/reports/MealReport').then((m) => m.MealReport), { loading: TabSkeleton });
+const MonthlySummaryReport = dynamic(() => import('@/components/admin/reports/MonthlySummaryReport'), { loading: TabSkeleton });
+const MonthlyReportGenerator = dynamic(() => import('@/components/admin/reports/MonthlyReportGenerator'), { loading: TabSkeleton });
 
 const DASHBOARD_TABS = [
     { id: 'analytics', label: 'Analytics', icon: Activity, color: 'text-blue-600' },
@@ -32,18 +36,32 @@ const DASHBOARD_TABS = [
 
 export default function DashboardPage() {
     const [activeTab, setActiveTab] = useState('analytics');
+    const firstTabSwitchMarkRef = useRef(false);
     const prefersReducedMotion = useReducedMotion();
+    const markPerf = useCallback((name: string) => {
+        if (typeof performance === 'undefined') return;
+        performance.mark(name);
+    }, []);
     const { loadSettings } = useSettingsStore();
-    const { loadFromSupabase: loadMeals } = useMealsStore();
-    const { loadFromSupabase: loadServices } = useServicesStore();
-    const { loadFromSupabase: loadGuests } = useGuestsStore();
+    const ensureMealsLoaded = useMealsStore((s) => s.ensureLoaded);
+    const ensureServicesLoaded = useServicesStore((s) => s.ensureLoaded);
+    const ensureGuestsLoaded = useGuestsStore((s) => s.ensureLoaded);
 
     useEffect(() => {
         loadSettings();
-        loadMeals();
-        loadServices();
-        loadGuests();
-    }, [loadSettings, loadMeals, loadServices, loadGuests]);
+        // Reports require full history; override operational default window.
+        ensureMealsLoaded({ since: '1970-01-01T00:00:00.000Z' });
+        ensureServicesLoaded({ since: '1970-01-01T00:00:00.000Z' });
+        ensureGuestsLoaded();
+    }, [loadSettings, ensureMealsLoaded, ensureServicesLoaded, ensureGuestsLoaded]);
+
+    const handleTabChange = (tabId: string) => {
+        if (!firstTabSwitchMarkRef.current) {
+            firstTabSwitchMarkRef.current = true;
+            markPerf('dashboard:first-tab-switch');
+        }
+        setActiveTab(tabId);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -81,7 +99,7 @@ export default function DashboardPage() {
                         return (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
+                                onClick={() => handleTabChange(tab.id)}
                                 className={cn(
                                     "flex items-center gap-2.5 px-6 py-3 rounded-xl text-sm font-black transition-all",
                                     isActive
@@ -107,7 +125,7 @@ export default function DashboardPage() {
                     return (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => handleTabChange(tab.id)}
                             className={cn(
                                 "flex-shrink-0 flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-black transition-all border",
                                 isActive

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, useDeferredValue, useTransition } from 'react';
 import { Search, UserPlus, X, Users, Loader2 } from 'lucide-react';
 import { useGuestsStore, Guest } from '@/stores/useGuestsStore';
 import { useMealsStore } from '@/stores/useMealsStore';
@@ -8,7 +8,7 @@ import { useServicesStore } from '@/stores/useServicesStore';
 import { useRemindersStore } from '@/stores/useRemindersStore';
 import { useDailyNotesStore } from '@/stores/useDailyNotesStore';
 import { flexibleNameSearch } from '@/lib/utils/flexibleNameSearch';
-import { findFuzzySuggestions } from '@/lib/utils/fuzzyMatch';
+import { findFuzzySuggestions, type FuzzySuggestion } from '@/lib/utils/fuzzyMatch';
 import { GuestCard } from '@/components/guests/GuestCard';
 import { GuestCreateModal } from '@/components/guests/GuestCreateModal';
 import { ServiceStatusOverview } from '@/components/checkin/ServiceStatusOverview';
@@ -38,10 +38,19 @@ export default function CheckInPage() {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const [defaultLocation, setDefaultLocation] = useState('');
     const [scrollMargin, setScrollMargin] = useState(0);
+    const [fuzzySuggestions, setFuzzySuggestions] = useState<FuzzySuggestion[]>([]);
+    const [, startTransition] = useTransition();
     const searchInputRef = useRef<HTMLInputElement>(null);
     const guestCardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
     const listContainerRef = useRef<HTMLDivElement>(null);
+    const firstSearchMarkRef = useRef(false);
+    const firstCreateModalMarkRef = useRef(false);
     const prefersReducedMotion = useReducedMotion();
+
+    const markPerf = useCallback((name: string) => {
+        if (typeof performance === 'undefined') return;
+        performance.mark(name);
+    }, []);
 
     // Use deferred value for search to prevent UI jank during typing
     const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -51,18 +60,18 @@ export default function CheckInPage() {
     const guestProxies = useGuestsStore((s) => s.guestProxies);
     const reminders = useRemindersStore((s) => s.reminders);
 
-    const { loadFromSupabase: loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase } = useGuestsStore(
+    const { ensureLoaded: ensureGuestsLoaded, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase } = useGuestsStore(
         useShallow((s) => ({
-            loadFromSupabase: s.loadFromSupabase,
+            ensureLoaded: s.ensureLoaded,
             loadGuestWarningsFromSupabase: s.loadGuestWarningsFromSupabase,
             loadGuestProxiesFromSupabase: s.loadGuestProxiesFromSupabase,
         }))
     );
-    const loadMeals = useMealsStore((s) => s.loadFromSupabase);
-    const loadServices = useServicesStore((s) => s.loadFromSupabase);
+    const ensureMealsLoaded = useMealsStore((s) => s.ensureLoaded);
+    const ensureServicesLoaded = useServicesStore((s) => s.ensureLoaded);
     const loadReminders = useRemindersStore((s) => s.loadFromSupabase);
-    const { loadFromSupabase: loadDailyNotes, subscribeToRealtime: subscribeDailyNotes } = useDailyNotesStore(
-        useShallow((s) => ({ loadFromSupabase: s.loadFromSupabase, subscribeToRealtime: s.subscribeToRealtime }))
+    const { ensureLoaded: ensureDailyNotesLoaded, subscribeToRealtime: subscribeDailyNotes } = useDailyNotesStore(
+        useShallow((s) => ({ ensureLoaded: s.ensureLoaded, subscribeToRealtime: s.subscribeToRealtime }))
     );
 
     // Precomputed status maps for efficient per-guest lookups
@@ -71,15 +80,15 @@ export default function CheckInPage() {
     // Shared function to load all data
     const loadAllData = useCallback(async () => {
         await Promise.all([
-            loadGuests(),
+            ensureGuestsLoaded(),
             loadGuestWarningsFromSupabase(),
             loadGuestProxiesFromSupabase(),
-            loadMeals(),
-            loadServices(),
+            ensureMealsLoaded(),
+            ensureServicesLoaded(),
             loadReminders(),
-            loadDailyNotes()
+            ensureDailyNotesLoaded()
         ]);
-    }, [loadGuests, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, loadMeals, loadServices, loadReminders, loadDailyNotes]);
+    }, [ensureGuestsLoaded, loadGuestWarningsFromSupabase, loadGuestProxiesFromSupabase, ensureMealsLoaded, ensureServicesLoaded, loadReminders, ensureDailyNotesLoaded]);
 
     // Initial data load
     useEffect(() => {
@@ -194,13 +203,22 @@ export default function CheckInPage() {
         });
     }, [isLargeList, selectedIndex, sortedGuests, rowVirtualizer]);
 
-    // Fuzzy suggestions for when there are no matches (use deferred value)
-    const fuzzySuggestions = useMemo(() => {
-        if (deferredSearchQuery.trim().length < 2 || filteredGuests.length > 0) return [];
-        return findFuzzySuggestions(deferredSearchQuery, guests, 3);
-    }, [deferredSearchQuery, filteredGuests, guests]);
+    // Fuzzy suggestions for when there are no matches (deprioritized to keep typing responsive)
+    useEffect(() => {
+        if (deferredSearchQuery.trim().length < 2 || filteredGuests.length > 0) {
+            setFuzzySuggestions([]);
+            return;
+        }
+        startTransition(() => {
+            setFuzzySuggestions(findFuzzySuggestions(deferredSearchQuery, guests, 3));
+        });
+    }, [deferredSearchQuery, filteredGuests.length, guests, startTransition]);
 
     const handleShowCreateForm = useCallback(() => {
+        if (!firstCreateModalMarkRef.current) {
+            firstCreateModalMarkRef.current = true;
+            markPerf('checkin:first-create-modal-open');
+        }
         const rawSearch = searchQuery.trim();
         let defaultCity = '';
         let workingSearch = rawSearch;
@@ -217,7 +235,7 @@ export default function CheckInPage() {
         setSearchQuery(workingSearch); // Clean up the search box
         setDefaultLocation(defaultCity);
         setShowCreateModal(true);
-    }, [searchQuery]);
+    }, [searchQuery, markPerf]);
 
     const handleClearSearch = useCallback(() => {
         setSearchQuery('');
@@ -368,6 +386,10 @@ export default function CheckInPage() {
                             type="text"
                             value={searchQuery}
                             onChange={(e) => {
+                                if (!firstSearchMarkRef.current) {
+                                    firstSearchMarkRef.current = true;
+                                    markPerf('checkin:first-search-interaction');
+                                }
                                 setSearchQuery(e.target.value);
                                 setSelectedIndex(-1);
                             }}

@@ -382,6 +382,29 @@ describe('useMealsStore', () => {
                 expect(useMealsStore.getState().mealRecords).toEqual([]);
                 expect(spy).toHaveBeenCalled();
             });
+
+            it('ensureLoaded skips reload when already loaded', async () => {
+                const { fetchAllPaginated } = await import('@/lib/utils/supabasePagination');
+                vi.mocked(fetchAllPaginated).mockClear();
+                useMealsStore.setState({ isLoaded: true, isLoading: false });
+
+                await useMealsStore.getState().ensureLoaded();
+                expect(fetchAllPaginated).not.toHaveBeenCalled();
+            });
+
+            it('ensureLoaded reloads when forced', async () => {
+                const { fetchAllPaginated } = await import('@/lib/utils/supabasePagination');
+                vi.mocked(fetchAllPaginated).mockClear();
+                vi.mocked(fetchAllPaginated)
+                    .mockResolvedValueOnce([])
+                    .mockResolvedValueOnce([])
+                    .mockResolvedValueOnce([]);
+
+                useMealsStore.setState({ isLoaded: true, isLoading: false });
+                await useMealsStore.getState().ensureLoaded({ force: true });
+
+                expect(fetchAllPaginated).toHaveBeenCalled();
+            });
         });
 
         describe('addMealRecord', () => {

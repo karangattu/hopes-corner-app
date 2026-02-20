@@ -3,7 +3,7 @@
  * Centralizes version information and changelog data
  */
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 export interface ChangelogItem {
     type: 'feature' | 'fix' | 'performance' | 'improvement';
@@ -19,6 +19,37 @@ export interface ChangelogEntry {
 
 // Changelog entries - add new entries at the top
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.4.0',
+        date: 'February 20, 2026',
+        highlights: [
+            {
+                type: 'performance',
+                title: 'Faster Check-In Search and Navigation',
+                description: 'Search input, tab switching, and key workflows now respond faster by reducing repeated data reloads and expensive re-renders.',
+            },
+            {
+                type: 'performance',
+                title: 'Smarter Background Updates',
+                description: 'Live updates now patch only the changed records instead of reloading entire datasets, making the app feel snappier during active use.',
+            },
+            {
+                type: 'improvement',
+                title: 'Lower Memory Use in Long Sessions',
+                description: 'Large operational data is no longer persisted unnecessarily, helping prevent slowdown during long kiosk-style sessions.',
+            },
+            {
+                type: 'improvement',
+                title: 'Faster Initial Load for Heavy Sections',
+                description: 'Dashboard/service sections and booking modals now load on demand, so the app starts faster and uses less JavaScript upfront.',
+            },
+            {
+                type: 'performance',
+                title: 'Database Query and Index Optimization',
+                description: 'Operational queries now use date windows and tuned indexes for better speed as data grows.',
+            },
+        ],
+    },
     {
         version: '0.3.0',
         date: 'February 20, 2026',

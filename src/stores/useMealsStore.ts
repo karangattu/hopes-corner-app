@@ -15,6 +15,14 @@ import {
 } from '@/lib/utils/mappers';
 import { todayPacificDateString, pacificDateStringFrom, parsePacificDateParts } from '@/lib/utils/date';
 
+const OPERATIONAL_WINDOW_DAYS = 45;
+
+const getOperationalSince = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - OPERATIONAL_WINDOW_DAYS);
+    return d.toISOString();
+};
+
 export interface MealRecord {
     id: string;
     guestId: string;
@@ -56,6 +64,9 @@ interface MealsState {
     lunchBagRecords: MealRecord[];
     holidayRecords: HolidayRecord[];
     haircutRecords: HaircutRecord[];
+    isLoaded: boolean;
+    isLoading: boolean;
+    lastLoadedAt?: string;
 
     addMealRecord: (guestId: string, quantity?: number, pickedUpByGuestId?: string | null, serviceDate?: string) => Promise<MealRecord>;
     deleteMealRecord: (recordId: string) => Promise<void>;
@@ -77,6 +88,7 @@ interface MealsState {
     // Automation
     checkAndAddAutomaticMeals: () => Promise<void>;
 
+    ensureLoaded: (options?: { force?: boolean; since?: string }) => Promise<void>;
     loadFromSupabase: () => Promise<void>;
     clearMealRecords: () => void;
     // Getters for specific days are useful helpers
@@ -106,6 +118,9 @@ export const useMealsStore = create<MealsState>()(
                     lunchBagRecords: [],
                     holidayRecords: [],
                     haircutRecords: [],
+                    isLoaded: false,
+                    isLoading: false,
+                    lastLoadedAt: undefined,
 
                     // Meal Actions
                     addMealRecord: async (guestId: string, quantity = 1, pickedUpByGuestId: string | null = null, serviceDate?: string) => {
@@ -543,13 +558,21 @@ export const useMealsStore = create<MealsState>()(
                     },
 
                     // Load from Supabase
-                    loadFromSupabase: async () => {
+                    ensureLoaded: async ({ force = false, since }: { force?: boolean; since?: string } = {}) => {
+                        if (!force && get().isLoaded) return;
+                        if (get().isLoading) return;
+
+                        set((state) => {
+                            state.isLoading = true;
+                        });
+
                         try {
+                            const effectiveSince = since || getOperationalSince();
                             // Use cached queries to prevent duplicate fetches in parallel loads
                             const [mealRows, holidayRows, haircutRows] = await Promise.all([
-                                getCachedMealRecords(),
-                                getCachedHolidayRecords(),
-                                getCachedHaircutRecords(),
+                                getCachedMealRecords({ since: effectiveSince, pageSize: 500 }),
+                                getCachedHolidayRecords({ since: effectiveSince, pageSize: 500 }),
+                                getCachedHaircutRecords({ since: effectiveSince, pageSize: 500 }),
                             ]);
 
                             set((state) => {
@@ -566,10 +589,20 @@ export const useMealsStore = create<MealsState>()(
 
                                 state.holidayRecords = (holidayRows || []) as any;
                                 state.haircutRecords = (haircutRows || []) as any;
+                                state.isLoaded = true;
+                                state.lastLoadedAt = new Date().toISOString();
                             });
                         } catch (error) {
                             console.error('Failed to load meal records from Supabase:', error);
+                        } finally {
+                            set((state) => {
+                                state.isLoading = false;
+                            });
                         }
+                    },
+
+                    loadFromSupabase: async () => {
+                        await get().ensureLoaded({ force: true });
                     },
 
                     clearMealRecords: () => {
@@ -605,6 +638,7 @@ export const useMealsStore = create<MealsState>()(
                 })),
                 {
                     name: 'hopes-corner-meals',
+                    partialize: () => ({}),
                 }
             )
         ),
