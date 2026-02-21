@@ -70,7 +70,7 @@ function LoginForm() {
                         onChange={(e) => setEmail(e.target.value)}
                         required
                         autoComplete="email"
-                        placeholder="you@example.com"
+                        placeholder="email@hopes-corner.org"
                         className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
                     />
                 </div>
