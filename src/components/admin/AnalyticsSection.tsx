@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
     XAxis,
     YAxis,
@@ -139,6 +140,7 @@ export function AnalyticsSection() {
     const openNoteModal = useModalStore((s) => s.openNoteModal);
 
     const [isMounted, setIsMounted] = useState(false);
+    const mobile = useIsMobile();
     const [activeView, setActiveView] = useState('overview');
     const [selectedPreset, setSelectedPreset] = useState('thisMonth');
     const [selectedPrograms, setSelectedPrograms] = useState(['meals', 'showers', 'laundry', 'bicycles', 'haircuts', 'holidays']);
@@ -760,10 +762,10 @@ export function AnalyticsSection() {
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} interval="preserveStartEnd" angle={-45} textAnchor="end" height={60} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
+                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: mobile ? 8 : 10, fontWeight: 600, fill: '#9ca3af' }} interval={mobile ? 'equidistantPreserveStart' : 'preserveStartEnd'} angle={-45} textAnchor="end" height={mobile ? 45 : 60} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: mobile ? 8 : 10, fontWeight: 600, fill: '#9ca3af' }} width={mobile ? 25 : 40} />
                                 <Tooltip content={<CustomChartTooltip />} wrapperStyle={{ zIndex: 50 }} />
-                                <Legend />
+                                {!mobile && <Legend />}
                                 {selectedPrograms.includes('meals') && (
                                     <Area type="monotone" dataKey="meals" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorMeals)" />
                                 )}

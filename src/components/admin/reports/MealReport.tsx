@@ -33,6 +33,7 @@ import { useGuestsStore } from "@/stores/useGuestsStore";
 import { todayPacificDateString, parsePacificDateParts } from "@/lib/utils/date";
 import { exportToCSV } from "@/lib/utils/csv";
 import { cn } from "@/lib/utils/cn";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 const DAYS_OF_WEEK = [
     { value: 1, label: "Monday", short: "Mon" },
@@ -106,6 +107,7 @@ export const MealReport = () => {
     const [comparisonMonths, setComparisonMonths] = useState(6);
     const [mealTypeFilters, setMealTypeFilters] = useState(MEAL_TYPE_DEFAULTS);
     const [isMounted, setIsMounted] = useState(false);
+    const mobile = useIsMobile();
 
     React.useEffect(() => { setIsMounted(true); }, []);
 
@@ -461,15 +463,15 @@ export const MealReport = () => {
                     </button>
                 </div>
 
-                <div className="h-[400px] w-full">
+                <div className="h-[280px] sm:h-[400px] w-full">
                     {isMounted ? (
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={calculateMealData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                            <ComposedChart data={calculateMealData} margin={mobile ? { top: 10, right: 8, left: -10, bottom: 0 } : { top: 20, right: 30, left: 20, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: mobile ? 9 : 12 }} dy={10} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: mobile ? 9 : 12 }} width={mobile ? 30 : 60} />
                                 <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 50 }} />
-                                <Legend />
+                                {!mobile && <Legend />}
                                 <Bar dataKey="guestMeals" name="Guest Meals" stackId="a" fill="#3B82F6" radius={[0, 0, 4, 4]} />
                                 <Bar dataKey="extras" name="Extras" stackId="a" fill="#F97316" />
                                 <Bar dataKey="rvMeals" name="RV Meals" stackId="a" fill="#A855F7" />
@@ -477,7 +479,7 @@ export const MealReport = () => {
                                 <Bar dataKey="shelterMeals" name="Shelter" stackId="a" fill="#EC4899" />
                                 <Bar dataKey="unitedEffortMeals" name="United Effort" stackId="a" fill="#6366F1" />
                                 <Bar dataKey="lunchBags" name="Lunch Bags" stackId="a" fill="#EAB308" radius={[4, 4, 0, 0]} />
-                                <Line type="monotone" dataKey="uniqueGuests" name="Unique Guests" stroke="#10B981" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} />
+                                <Line type="monotone" dataKey="uniqueGuests" name="Unique Guests" stroke="#10B981" strokeWidth={mobile ? 2 : 3} dot={mobile ? false : { r: 4, strokeWidth: 2, fill: '#fff' }} />
                             </ComposedChart>
                         </ResponsiveContainer>
                     ) : (
@@ -497,12 +499,12 @@ export const MealReport = () => {
                             <PieChartIcon size={20} className="text-purple-600" />
                             Meal Type Breakdown — {currentMonthData.month}
                         </h3>
-                        <div className="flex items-center gap-6">
-                            <div className="h-[200px] w-[200px]">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                            <div className="h-[160px] w-[160px] sm:h-[200px] sm:w-[200px]">
                                 {isMounted && mealTypePieData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={mealTypePieData} innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                                            <Pie data={mealTypePieData} innerRadius={mobile ? 35 : 50} outerRadius={mobile ? 60 : 80} paddingAngle={3} dataKey="value">
                                                 {mealTypePieData.map((entry, idx) => (
                                                     <Cell key={`cell-${idx}`} fill={entry.color} />
                                                 ))}
@@ -536,12 +538,12 @@ export const MealReport = () => {
                             <Users size={20} className="text-emerald-600" />
                             Guest Age Groups — {currentMonthData.month}
                         </h3>
-                        <div className="flex items-center gap-6">
-                            <div className="h-[200px] w-[200px]">
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                            <div className="h-[160px] w-[160px] sm:h-[200px] sm:w-[200px]">
                                 {isMounted && ageGroupPieData.length > 0 ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={ageGroupPieData} innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+                                            <Pie data={ageGroupPieData} innerRadius={mobile ? 35 : 50} outerRadius={mobile ? 60 : 80} paddingAngle={3} dataKey="value">
                                                 {ageGroupPieData.map((entry, idx) => (
                                                     <Cell key={`cell-${idx}`} fill={entry.color} />
                                                 ))}
