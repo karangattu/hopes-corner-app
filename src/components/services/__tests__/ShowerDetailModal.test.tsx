@@ -399,4 +399,55 @@ describe('ShowerDetailModal', () => {
             expect(doneBadge?.className).toContain('text-emerald-700');
         });
     });
+
+    describe('Disabled When Done', () => {
+        const doneRecord = { ...mockRecord, status: 'done' };
+
+        it('shows "Shower Completed" banner instead of "Mark as Done" button when done', () => {
+            render(<ShowerDetailModal {...defaultProps} record={doneRecord} />);
+            expect(screen.getByText('Shower Completed')).toBeDefined();
+            expect(screen.queryByText('Mark as Done')).toBeNull();
+        });
+
+        it('disables all amenity item buttons when shower is done', () => {
+            mockCheckAvailability.mockReturnValue({ available: true });
+            render(<ShowerDetailModal {...defaultProps} record={doneRecord} />);
+
+            const tshirtButton = screen.getByText('T-Shirt').closest('button') as HTMLButtonElement;
+            const jacketButton = screen.getByText('Jacket').closest('button') as HTMLButtonElement;
+            const tentButton = screen.getByText('Tent').closest('button') as HTMLButtonElement;
+
+            expect(tshirtButton?.disabled).toBe(true);
+            expect(jacketButton?.disabled).toBe(true);
+            expect(tentButton?.disabled).toBe(true);
+        });
+
+        it('shows "Disabled — shower complete" label in amenities header when done', () => {
+            render(<ShowerDetailModal {...defaultProps} record={doneRecord} />);
+            expect(screen.getByText('Disabled — shower complete')).toBeDefined();
+        });
+
+        it('does not show "Disabled" label when shower is not done', () => {
+            render(<ShowerDetailModal {...defaultProps} />);
+            expect(screen.queryByText('Disabled — shower complete')).toBeNull();
+        });
+
+        it('amenity buttons are not disabled when shower is not done', () => {
+            mockCheckAvailability.mockReturnValue({ available: true });
+            render(<ShowerDetailModal {...defaultProps} />);
+
+            const tshirtButton = screen.getByText('T-Shirt').closest('button') as HTMLButtonElement;
+            expect(tshirtButton?.disabled).toBe(false);
+        });
+
+        it('does not call giveItem when amenity is clicked in done state', () => {
+            mockCheckAvailability.mockReturnValue({ available: true });
+            render(<ShowerDetailModal {...defaultProps} record={doneRecord} />);
+
+            const tshirtButton = screen.getByText('T-Shirt').closest('button') as HTMLButtonElement;
+            fireEvent.click(tshirtButton!);
+
+            expect(mockGiveItem).not.toHaveBeenCalled();
+        });
+    });
 });
