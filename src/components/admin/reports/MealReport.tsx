@@ -468,7 +468,7 @@ export const MealReport = () => {
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                                <Tooltip content={<CustomTooltip />} />
+                                <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 50 }} />
                                 <Legend />
                                 <Bar dataKey="guestMeals" name="Guest Meals" stackId="a" fill="#3B82F6" radius={[0, 0, 4, 4]} />
                                 <Bar dataKey="extras" name="Extras" stackId="a" fill="#F97316" />
@@ -507,7 +507,7 @@ export const MealReport = () => {
                                                     <Cell key={`cell-${idx}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip />
+                                            <Tooltip wrapperStyle={{ zIndex: 50 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 ) : (
@@ -546,7 +546,7 @@ export const MealReport = () => {
                                                     <Cell key={`cell-${idx}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <Tooltip />
+                                            <Tooltip wrapperStyle={{ zIndex: 50 }} />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 ) : (

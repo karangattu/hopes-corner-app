@@ -3,7 +3,7 @@
  * Centralizes version information and changelog data
  */
 
-export const APP_VERSION = '0.5.2';
+export const APP_VERSION = '0.5.3';
 
 export interface ChangelogItem {
     type: 'feature' | 'fix' | 'performance' | 'improvement';
@@ -19,6 +19,32 @@ export interface ChangelogEntry {
 
 // Changelog entries - add new entries at the top
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.5.3',
+        date: 'February 21, 2026',
+        highlights: [
+            {
+                type: 'feature',
+                title: 'Daily Meal Limit',
+                description: 'Guests are now limited to 4 meals per day (2 regular + 2 extra). The check-in card shows a clear indicator when the limit is reached.',
+            },
+            {
+                type: 'fix',
+                title: 'Undo Extra Meals',
+                description: 'The undo button now works for extra meals too. A dedicated undo control appears on both desktop and mobile after logging an extra meal.',
+            },
+            {
+                type: 'improvement',
+                title: 'Board Report Redesign',
+                description: 'The monthly Service Statistics table now uses color-coded left borders for each service category, replacing the hard-to-read gray backgrounds.',
+            },
+            {
+                type: 'fix',
+                title: 'Bicycle Undo Fix',
+                description: 'Fixed a bug where undoing a bicycle booking would attempt to delete the record twice.',
+            },
+        ],
+    },
     {
         version: '0.5.2',
         date: 'February 21, 2026',

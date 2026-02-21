@@ -762,7 +762,7 @@ export function AnalyticsSection() {
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} interval="preserveStartEnd" angle={-45} textAnchor="end" height={60} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
-                                <Tooltip content={<CustomChartTooltip />} />
+                                <Tooltip content={<CustomChartTooltip />} wrapperStyle={{ zIndex: 50 }} />
                                 <Legend />
                                 {selectedPrograms.includes('meals') && (
                                     <Area type="monotone" dataKey="meals" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorMeals)" />
