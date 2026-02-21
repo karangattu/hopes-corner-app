@@ -155,7 +155,7 @@ export function ShowerDetailModal({ isOpen, onClose, record, guest }: ShowerDeta
                         </div>
                         
                         {/* Mark as Done Button - only show if not already done */}
-                        {record.status !== 'done' && (
+                        {record.status !== 'done' ? (
                             <button
                                 onClick={handleMarkAsDone}
                                 disabled={markingDone}
@@ -172,6 +172,11 @@ export function ShowerDetailModal({ isOpen, onClose, record, guest }: ShowerDeta
                                 )}
                                 Mark as Done
                             </button>
+                        ) : (
+                            <div className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                                <CheckCircle size={16} className="text-emerald-600" />
+                                <span className="text-emerald-700 font-bold text-sm">Shower Completed</span>
+                            </div>
                         )}
                         
                         <div className="pt-3 border-t border-gray-200">
@@ -185,10 +190,13 @@ export function ShowerDetailModal({ isOpen, onClose, record, guest }: ShowerDeta
                     </div>
 
                     {/* Amenities Section */}
-                    <div>
+                    <div className={cn(record.status === 'done' && 'opacity-50 pointer-events-none')}>
                         <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
                             <Package className="text-purple-600" size={20} />
                             Amenities & Supplies
+                            {record.status === 'done' && (
+                                <span className="text-xs font-bold text-gray-400 ml-auto">Disabled — shower complete</span>
+                            )}
                         </h3>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -196,40 +204,43 @@ export function ShowerDetailModal({ isOpen, onClose, record, guest }: ShowerDeta
                                 const availability = checkAvailability(guest.id, item.key);
                                 const isAvailable = availability.available;
                                 const isProcessing = localLoading === item.key;
+                                const isDone = record.status === 'done';
                                 const Icon = item.icon;
 
                                 return (
                                     <button
                                         key={item.key}
                                         onClick={() => handleGiveItem(item.key, item.label)}
-                                        disabled={!isAvailable || isProcessing || isLoading}
+                                        disabled={isDone || !isAvailable || isProcessing || isLoading}
                                         className={cn(
                                             "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all relative overflow-hidden",
-                                            isAvailable
-                                                ? "bg-white border-gray-100 hover:border-purple-200 hover:bg-purple-50 hover:shadow-sm cursor-pointer active:scale-95"
-                                                : "bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed"
+                                            isDone
+                                                ? "bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed"
+                                                : isAvailable
+                                                    ? "bg-white border-gray-100 hover:border-purple-200 hover:bg-purple-50 hover:shadow-sm cursor-pointer active:scale-95"
+                                                    : "bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed"
                                         )}
                                     >
                                         {isProcessing ? (
                                             <Loader2 className="animate-spin text-purple-600 mb-1" size={24} />
                                         ) : (
-                                            <Icon size={24} className={cn("mb-1", isAvailable ? "text-purple-600" : "text-gray-400")} />
+                                            <Icon size={24} className={cn("mb-1", (isAvailable && !isDone) ? "text-purple-600" : "text-gray-400")} />
                                         )}
 
                                         <span className="font-bold text-sm text-gray-900">{item.label}</span>
 
-                                        {!isAvailable && availability.daysRemaining !== undefined && (
+                                        {!isDone && !isAvailable && availability.daysRemaining !== undefined && (
                                             <span className="text-[10px] font-bold text-amber-600 mt-1 flex items-center gap-1">
                                                 <Clock size={10} /> {availability.daysRemaining}d left
                                             </span>
                                         )}
-                                        {!isAvailable && availability.daysRemaining === undefined && (
+                                        {!isDone && !isAvailable && availability.daysRemaining === undefined && (
                                             <span className="text-[10px] text-gray-400 mt-1 font-medium">
                                                 Limit reached
                                             </span>
                                         )}
 
-                                        {isAvailable && (
+                                        {!isDone && isAvailable && (
                                             <span className="text-[10px] text-gray-400 mt-1 font-medium">
                                                 {item.limit}
                                             </span>
