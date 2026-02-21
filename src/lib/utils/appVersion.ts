@@ -3,7 +3,7 @@
  * Centralizes version information and changelog data
  */
 
-export const APP_VERSION = '0.5.1';
+export const APP_VERSION = '0.5.2';
 
 export interface ChangelogItem {
     type: 'feature' | 'fix' | 'performance' | 'improvement';
@@ -19,6 +19,22 @@ export interface ChangelogEntry {
 
 // Changelog entries - add new entries at the top
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.5.2',
+        date: 'February 21, 2026',
+        highlights: [
+            {
+                type: 'fix',
+                title: 'Shower Cancellations Now Tracked',
+                description: 'Cancelling a shower now moves it to the Cancelled tab instead of deleting it, so staff can see a full history of the day.',
+            },
+            {
+                type: 'fix',
+                title: 'Shower Modal Closes on Done',
+                description: 'The shower detail modal now closes automatically after marking a shower as done, returning you straight to the list.',
+            },
+        ],
+    },
     {
         version: '0.5.1',
         date: 'February 21, 2026',
