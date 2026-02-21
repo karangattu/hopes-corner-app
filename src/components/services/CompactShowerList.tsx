@@ -26,7 +26,6 @@ const ShowerListRow = memo(({ record, guestName, onGuestClick, readOnly = false,
 }) => {
     const [isUpdating, setIsUpdating] = useState(false);
     const updateShowerStatus = useServicesStore((s) => s.updateShowerStatus);
-    const deleteShowerRecord = useServicesStore((s) => s.deleteShowerRecord);
 
     const handleStatusUpdate = useCallback(async (e: React.MouseEvent, newStatus: string) => {
         e.stopPropagation();
@@ -48,14 +47,18 @@ const ShowerListRow = memo(({ record, guestName, onGuestClick, readOnly = false,
         if (!window.confirm('Are you sure you want to cancel this shower?')) return;
         setIsUpdating(true);
         try {
-            await deleteShowerRecord(record.id);
-            toast.success('Shower cancelled');
+            const success = await updateShowerStatus(record.id, 'cancelled');
+            if (success) {
+                toast.success('Shower cancelled');
+            } else {
+                toast.error('Failed to cancel shower');
+            }
         } catch {
             toast.error('Failed to cancel shower');
         } finally {
             setIsUpdating(false);
         }
-    }, [record.id, readOnly, deleteShowerRecord]);
+    }, [record.id, readOnly, updateShowerStatus]);
 
     const isActive = record.status !== 'done' && record.status !== 'cancelled' && record.status !== 'no_show';
     const isDone = record.status === 'done';

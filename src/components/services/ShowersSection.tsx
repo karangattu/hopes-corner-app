@@ -482,7 +482,6 @@ export function ShowersSection() {
 
 function ShowerListItem({ record, guest, onClick, readOnly = false, queuePosition }: { record: any, guest: any, onClick?: () => void, readOnly?: boolean, queuePosition?: number }) {
     const [isUpdating, setIsUpdating] = useState(false);
-    const deleteShowerRecord = useServicesStore((s) => s.deleteShowerRecord);
     const updateShowerStatus = useServicesStore((s) => s.updateShowerStatus);
 
     const handleCancel = async () => {
@@ -490,8 +489,12 @@ function ShowerListItem({ record, guest, onClick, readOnly = false, queuePositio
         if (!window.confirm('Are you sure you want to cancel this shower?')) return;
         setIsUpdating(true);
         try {
-            await deleteShowerRecord(record.id);
-            toast.success('Shower cancelled');
+            const success = await updateShowerStatus(record.id, 'cancelled');
+            if (success) {
+                toast.success('Shower cancelled');
+            } else {
+                toast.error('Failed to cancel shower');
+            }
         } catch (error) {
             toast.error('Failed to cancel shower');
         } finally {

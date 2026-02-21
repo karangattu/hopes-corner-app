@@ -263,7 +263,7 @@ describe('CompactShowerList Component', () => {
             });
         });
 
-        it('calls deleteShowerRecord when Cancel button is clicked and confirmed', async () => {
+        it('calls updateShowerStatus with cancelled when Cancel button is clicked and confirmed', async () => {
             vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
             const records = [{ id: 'r1', guestId: 'g1', time: '09:00', status: 'booked' }];
             render(<CompactShowerList records={records} />);
@@ -271,18 +271,18 @@ describe('CompactShowerList Component', () => {
             fireEvent.click(screen.getByLabelText('Cancel shower'));
 
             await waitFor(() => {
-                expect(mockDeleteShowerRecord).toHaveBeenCalledWith('r1');
+                expect(mockUpdateShowerStatus).toHaveBeenCalledWith('r1', 'cancelled');
             });
         });
 
-        it('does not call deleteShowerRecord when Cancel is declined', async () => {
+        it('does not call updateShowerStatus when Cancel is declined', async () => {
             vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
             const records = [{ id: 'r1', guestId: 'g1', time: '09:00', status: 'booked' }];
             render(<CompactShowerList records={records} />);
 
             fireEvent.click(screen.getByLabelText('Cancel shower'));
 
-            expect(mockDeleteShowerRecord).not.toHaveBeenCalled();
+            expect(mockUpdateShowerStatus).not.toHaveBeenCalledWith('r1', 'cancelled');
         });
 
         it('hides action buttons when readOnly is true', () => {
