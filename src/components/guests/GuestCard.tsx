@@ -306,6 +306,12 @@ function PureGuestCard({
         e.stopPropagation();
         if (isPending || isBannedFromMeals) return;
 
+        // Require explicit confirmation to prevent accidental extra meal additions
+        const confirmed = window.confirm(
+            `Add an extra meal for ${guest.preferredName || guest.firstName}?\n\nThis is in addition to the ${baseMealCount} meal${baseMealCount !== 1 ? 's' : ''} already logged.`
+        );
+        if (!confirmed) return;
+
         setIsPending(true);
         try {
             const record = await addExtraMealRecord(guest.id, 1);
@@ -613,29 +619,35 @@ function PureGuestCard({
                                     ))}
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-1 px-1 py-1 bg-emerald-50/50 rounded-xl border border-emerald-100">
-                                    <div className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm">
-                                        <Check size={14} />
-                                        <span>{totalMeals}</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 px-1 py-1 bg-emerald-50/50 rounded-xl border border-emerald-100">
+                                        <div className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm">
+                                            <Check size={14} />
+                                            <span>{baseMealCount}</span>
+                                            {extraMealsCount > 0 && (
+                                                <span className="text-orange-600 text-xs ml-0.5">+{extraMealsCount}</span>
+                                            )}
+                                        </div>
+                                        {mealAction && (
+                                            <button
+                                                onClick={(e) => handleUndo(e, mealAction.id, 'Check-in')}
+                                                disabled={isPending}
+                                                className="flex items-center justify-center h-10 px-2 rounded-lg bg-orange-100 border border-orange-200 text-orange-700 hover:bg-orange-200 transition-all active:scale-95 disabled:opacity-50"
+                                                title="Undo Check-in"
+                                            >
+                                                <RotateCcw size={16} />
+                                            </button>
+                                        )}
                                     </div>
                                     <button
                                         onClick={handleExtraMealAdd}
                                         disabled={isPending}
-                                        className="flex items-center justify-center h-10 px-2 rounded-lg bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-all active:scale-95 disabled:opacity-50"
-                                        title="Add extra meal"
+                                        className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-orange-50 border-2 border-dashed border-orange-300 text-orange-600 font-bold text-xs hover:bg-orange-100 hover:border-orange-400 transition-all active:scale-95 disabled:opacity-50"
+                                        title="Add extra meal (requires confirmation)"
                                     >
-                                        <Plus size={16} />
+                                        <Plus size={14} />
+                                        <span>Extra</span>
                                     </button>
-                                    {mealAction && (
-                                        <button
-                                            onClick={(e) => handleUndo(e, mealAction.id, 'Check-in')}
-                                            disabled={isPending}
-                                            className="flex items-center justify-center h-10 px-2 rounded-lg bg-orange-100 border border-orange-200 text-orange-700 hover:bg-orange-200 transition-all active:scale-95 disabled:opacity-50"
-                                            title="Undo Check-in"
-                                        >
-                                            <RotateCcw size={16} />
-                                        </button>
-                                    )}
                                 </div>
                             )}
                         </div>
@@ -828,17 +840,25 @@ function PureGuestCard({
                                     )}
                                     <span className="text-xs font-bold text-gray-700">{todayBicycle ? 'Bicycle ✓' : 'Bicycle'}</span>
                                 </button>
-                                {todayMeal && (
+                            </div>
+
+                            {/* Extra Meal - separated from main services to prevent accidental taps */}
+                            {todayMeal && (
+                                <div className="mt-2 pt-2 border-t border-dashed border-orange-200">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1.5">Extra Meals</p>
                                     <button
                                         onClick={handleExtraMealAdd}
                                         disabled={isPending || isBannedFromMeals}
-                                        className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-gray-100 shadow-sm hover:border-emerald-200 hover:bg-emerald-50 transition-all disabled:opacity-50"
+                                        className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-orange-50 border-2 border-dashed border-orange-300 text-orange-700 font-bold text-sm hover:bg-orange-100 hover:border-orange-400 transition-all disabled:opacity-50"
                                     >
-                                        <Plus size={20} className="text-emerald-500 mb-1.5" />
-                                        <span className="text-xs font-bold text-gray-700">Extra Meal</span>
+                                        <Plus size={16} />
+                                        <span>Add Extra Meal</span>
+                                        {extraMealsCount > 0 && (
+                                            <span className="ml-1 px-1.5 py-0.5 bg-orange-200 rounded-full text-[10px] font-black">{extraMealsCount} added</span>
+                                        )}
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             {/* Linked Guests Manager */}
                             <LinkedGuestsList guestId={guest.id} className="mb-4" />

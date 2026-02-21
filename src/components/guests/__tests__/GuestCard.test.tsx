@@ -581,4 +581,136 @@ describe('GuestCard Component', () => {
             expect(laundryBadge).toBeDefined();
         });
     });
+
+    describe('Extra Meal Separation', () => {
+        const mealStatusMapWithMeal = new Map([
+            ['g1', {
+                hasMeal: true,
+                mealRecord: { id: 'meal-1', count: 1, guestId: 'g1', date: new Date().toISOString() },
+                mealCount: 1,
+                extraMealCount: 0,
+                totalMeals: 1,
+            }],
+        ]);
+
+        it('shows Extra button with dashed orange styling on desktop when meal is assigned', () => {
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />
+            );
+            // Look for the desktop "Extra" button with distinctive dashed border styling
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).not.toBeNull();
+            expect(extraButton?.className).toContain('border-dashed');
+            expect(extraButton?.className).toContain('border-orange-300');
+            expect(extraButton?.textContent).toContain('Extra');
+        });
+
+        it('does not show Extra button on desktop when no meal assigned yet', () => {
+            const { container } = render(<GuestCard guest={baseGuest} />);
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).toBeNull();
+        });
+
+        it('shows separated Extra Meals section in expanded view when meal assigned', () => {
+            render(<GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />);
+            // Expand the card
+            fireEvent.click(screen.getByText('Johnny'));
+            // The extra meals section should be in its own labeled area
+            expect(screen.getByText('Extra Meals')).toBeDefined();
+            expect(screen.getByText('Add Extra Meal')).toBeDefined();
+        });
+
+        it('does not show Extra Meals section in expanded view when no meal assigned', () => {
+            render(<GuestCard guest={baseGuest} />);
+            // Expand the card
+            fireEvent.click(screen.getByText('Johnny'));
+            expect(screen.queryByText('Extra Meals')).toBeNull();
+            expect(screen.queryByText('Add Extra Meal')).toBeNull();
+        });
+
+        it('shows confirmation dialog before adding extra meal', async () => {
+            const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+            render(<GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />);
+
+            // Click the desktop Extra button
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />
+            );
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).not.toBeNull();
+            fireEvent.click(extraButton!);
+
+            await waitFor(() => {
+                expect(confirmSpy).toHaveBeenCalled();
+            });
+            confirmSpy.mockRestore();
+        });
+
+        it('does not add extra meal when confirmation is declined', async () => {
+            vi.spyOn(window, 'confirm').mockReturnValue(false);
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />
+            );
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).not.toBeNull();
+            fireEvent.click(extraButton!);
+
+            await waitFor(() => {
+                expect(mockAddExtraMealRecord).not.toHaveBeenCalled();
+            });
+            vi.restoreAllMocks();
+        });
+
+        it('adds extra meal when confirmation is accepted', async () => {
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={mealStatusMapWithMeal} />
+            );
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).not.toBeNull();
+            fireEvent.click(extraButton!);
+
+            await waitFor(() => {
+                expect(mockAddExtraMealRecord).toHaveBeenCalledWith('g1', 1);
+            });
+            vi.restoreAllMocks();
+        });
+
+        it('shows extra meal count badge when extras have been added', () => {
+            const statusWithExtras = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 1, guestId: 'g1', date: new Date().toISOString() },
+                    mealCount: 1,
+                    extraMealCount: 2,
+                    totalMeals: 3,
+                }],
+            ]);
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={statusWithExtras} />
+            );
+            // Desktop: should show base count and +extra count
+            expect(screen.getByText('+2')).toBeDefined();
+        });
+
+        it('displays base meal count separately from extra count on desktop', () => {
+            const statusWithExtras = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 2, guestId: 'g1', date: new Date().toISOString() },
+                    mealCount: 2,
+                    extraMealCount: 1,
+                    totalMeals: 3,
+                }],
+            ]);
+            const { container } = render(
+                <GuestCard guest={baseGuest} mealStatusMap={statusWithExtras} />
+            );
+            // The desktop extra button should show "+1" extra count indicator
+            expect(screen.getByText('+1')).toBeDefined();
+            // The Extra button should be present and visually separate
+            const extraButton = container.querySelector('button[title="Add extra meal (requires confirmation)"]');
+            expect(extraButton).not.toBeNull();
+        });
+    });
 });
