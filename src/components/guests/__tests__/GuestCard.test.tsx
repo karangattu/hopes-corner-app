@@ -713,4 +713,122 @@ describe('GuestCard Component', () => {
             expect(extraButton).not.toBeNull();
         });
     });
+
+    describe('Extra Meal Undo', () => {
+        it('shows undo button for extra meals on desktop when extraMealActionId is set', () => {
+            const mealStatusMap = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 1 },
+                    mealCount: 1,
+                    extraMealCount: 1,
+                    totalMeals: 2,
+                }],
+            ]);
+            const actionStatusMap = new Map([
+                ['g1', {
+                    mealActionId: 'action-meal-1',
+                    extraMealActionId: 'action-extra-1',
+                }],
+            ]);
+            const { container } = render(
+                <GuestCard 
+                    guest={baseGuest} 
+                    mealStatusMap={mealStatusMap}
+                    actionStatusMap={actionStatusMap}
+                />
+            );
+            const undoExtraButton = container.querySelector('button[title="Undo extra meal"]');
+            expect(undoExtraButton).not.toBeNull();
+        });
+
+        it('does not show extra meal undo button when no extraMealActionId', () => {
+            const mealStatusMap = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 1 },
+                    mealCount: 1,
+                    extraMealCount: 1,
+                    totalMeals: 2,
+                }],
+            ]);
+            const actionStatusMap = new Map([
+                ['g1', {
+                    mealActionId: 'action-meal-1',
+                }],
+            ]);
+            const { container } = render(
+                <GuestCard 
+                    guest={baseGuest} 
+                    mealStatusMap={mealStatusMap}
+                    actionStatusMap={actionStatusMap}
+                />
+            );
+            const undoExtraButton = container.querySelector('button[title="Undo extra meal"]');
+            expect(undoExtraButton).toBeNull();
+        });
+
+        it('calls undoAction with the extra meal action id when undo extra meal is clicked', async () => {
+            const mealStatusMap = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 1 },
+                    mealCount: 1,
+                    extraMealCount: 1,
+                    totalMeals: 2,
+                }],
+            ]);
+            const actionStatusMap = new Map([
+                ['g1', {
+                    mealActionId: 'action-meal-1',
+                    extraMealActionId: 'action-extra-1',
+                }],
+            ]);
+            render(
+                <GuestCard 
+                    guest={baseGuest} 
+                    mealStatusMap={mealStatusMap}
+                    actionStatusMap={actionStatusMap}
+                />
+            );
+            const undoExtraButtons = document.querySelectorAll('button[title="Undo extra meal"]');
+            // Click the first (desktop) undo extra meal button
+            if (undoExtraButtons.length > 0) {
+                fireEvent.click(undoExtraButtons[0]);
+                await waitFor(() => {
+                    expect(mockUndoAction).toHaveBeenCalledWith('action-extra-1');
+                });
+            }
+        });
+
+        it('shows extra meal undo at meal limit on desktop', () => {
+            const mealStatusMap = new Map([
+                ['g1', {
+                    hasMeal: true,
+                    mealRecord: { id: 'meal-1', count: 2 },
+                    mealCount: 2,
+                    extraMealCount: 2,
+                    totalMeals: 4,
+                    hasReachedMealLimit: true,
+                    hasReachedExtraMealLimit: true,
+                }],
+            ]);
+            const actionStatusMap = new Map([
+                ['g1', {
+                    mealActionId: 'action-meal-1',
+                    extraMealActionId: 'action-extra-1',
+                }],
+            ]);
+            const { container } = render(
+                <GuestCard 
+                    guest={baseGuest} 
+                    mealStatusMap={mealStatusMap}
+                    actionStatusMap={actionStatusMap}
+                />
+            );
+            // Even at limit, an undo button should be present
+            const undoExtraButton = container.querySelector('button[title="Undo extra meal"]');
+            expect(undoExtraButton).not.toBeNull();
+        });
+    });
 });

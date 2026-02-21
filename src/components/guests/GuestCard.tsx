@@ -241,6 +241,7 @@ function PureGuestCard({
         const actions = getActionsForGuestToday(guest.id);
         return {
             mealActionId: actions.find(a => a.type === 'MEAL_ADDED' && pacificDateStringFrom(a.timestamp) === today)?.id,
+            extraMealActionId: actions.find(a => a.type === 'EXTRA_MEALS_ADDED' && pacificDateStringFrom(a.timestamp) === today)?.id,
             showerActionId: actions.find(a => a.type === 'SHOWER_BOOKED' && pacificDateStringFrom(a.timestamp) === today)?.id,
             laundryActionId: actions.find(a => a.type === 'LAUNDRY_BOOKED' && pacificDateStringFrom(a.timestamp) === today)?.id,
             bicycleActionId: actions.find(a => a.type === 'BICYCLE_LOGGED' && pacificDateStringFrom(a.timestamp) === today)?.id,
@@ -277,6 +278,7 @@ function PureGuestCard({
     const todayHoliday = serviceStatus.hasHoliday;
 
     const mealAction = actionStatus.mealActionId ? { id: actionStatus.mealActionId } : undefined;
+    const extraMealAction = actionStatus.extraMealActionId ? { id: actionStatus.extraMealActionId } : undefined;
     const showerAction = actionStatus.showerActionId ? { id: actionStatus.showerActionId } : undefined;
     const laundryAction = actionStatus.laundryActionId ? { id: actionStatus.laundryActionId } : undefined;
     const bicycleAction = actionStatus.bicycleActionId ? { id: actionStatus.bicycleActionId } : undefined;
@@ -646,22 +648,46 @@ function PureGuestCard({
                                         )}
                                     </div>
                                     {hasReachedMealLimit || hasReachedExtraMealLimit ? (
-                                        <div
-                                            className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 text-gray-400 font-bold text-xs cursor-not-allowed"
-                                            title={`Daily meal limit reached (${totalMeals}/${4})`}
-                                        >
-                                            <span>Limit</span>
+                                        <div className="flex items-center gap-1">
+                                            <div
+                                                className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 text-gray-400 font-bold text-xs cursor-not-allowed"
+                                                title={`Daily meal limit reached (${totalMeals}/${4})`}
+                                            >
+                                                <span>Limit</span>
+                                            </div>
+                                            {extraMealAction && (
+                                                <button
+                                                    onClick={(e) => handleUndo(e, extraMealAction.id, 'Extra meal')}
+                                                    disabled={isPending}
+                                                    className="flex items-center justify-center h-10 px-2 rounded-lg bg-orange-100 border border-orange-200 text-orange-700 hover:bg-orange-200 transition-all active:scale-95 disabled:opacity-50"
+                                                    title="Undo extra meal"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
-                                        <button
-                                            onClick={handleExtraMealAdd}
-                                            disabled={isPending}
-                                            className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-orange-50 border-2 border-dashed border-orange-300 text-orange-600 font-bold text-xs hover:bg-orange-100 hover:border-orange-400 transition-all active:scale-95 disabled:opacity-50"
-                                            title="Add extra meal (requires confirmation)"
-                                        >
-                                            <Plus size={14} />
-                                            <span>Extra</span>
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={handleExtraMealAdd}
+                                                disabled={isPending}
+                                                className="flex items-center justify-center gap-1 h-10 px-3 rounded-lg bg-orange-50 border-2 border-dashed border-orange-300 text-orange-600 font-bold text-xs hover:bg-orange-100 hover:border-orange-400 transition-all active:scale-95 disabled:opacity-50"
+                                                title="Add extra meal (requires confirmation)"
+                                            >
+                                                <Plus size={14} />
+                                                <span>Extra</span>
+                                            </button>
+                                            {extraMealAction && (
+                                                <button
+                                                    onClick={(e) => handleUndo(e, extraMealAction.id, 'Extra meal')}
+                                                    disabled={isPending}
+                                                    className="flex items-center justify-center h-10 px-2 rounded-lg bg-orange-100 border border-orange-200 text-orange-700 hover:bg-orange-200 transition-all active:scale-95 disabled:opacity-50"
+                                                    title="Undo extra meal"
+                                                >
+                                                    <RotateCcw size={14} />
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -860,7 +886,20 @@ function PureGuestCard({
                             {/* Extra Meal - separated from main services to prevent accidental taps */}
                             {todayMeal && (
                                 <div className="mt-2 pt-2 border-t border-dashed border-orange-200">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1.5">Extra Meals</p>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500">Extra Meals</p>
+                                        {extraMealAction && (
+                                            <button
+                                                onClick={(e) => handleUndo(e, extraMealAction.id, 'Extra meal')}
+                                                disabled={isPending}
+                                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-100 border border-orange-200 text-orange-700 text-xs font-semibold hover:bg-orange-200 transition-all active:scale-95 disabled:opacity-50"
+                                                title="Undo extra meal"
+                                            >
+                                                <RotateCcw size={12} />
+                                                Undo
+                                            </button>
+                                        )}
+                                    </div>
                                     {hasReachedMealLimit || hasReachedExtraMealLimit ? (
                                         <div className="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-gray-50 border-2 border-dashed border-gray-300 text-gray-400 font-bold text-sm">
                                             <span>Daily meal limit reached ({totalMeals}/{4})</span>
@@ -1160,6 +1199,7 @@ const actionSnapshot = (props: GuestCardProps) => {
     const s = props.actionStatusMap?.get(id) || defaultActionStatus;
     return [
         s.mealActionId || '',
+        s.extraMealActionId || '',
         s.showerActionId || '',
         s.laundryActionId || '',
         s.bicycleActionId || '',

@@ -99,7 +99,6 @@ export const useActionHistoryStore = create<ActionHistoryState>()(
                         case 'BICYCLE_LOGGED': {
                             const { deleteBicycleRecord } = useServicesStore.getState();
                             await deleteBicycleRecord(action.data.recordId);
-                            await deleteBicycleRecord(action.data.recordId);
                             break;
                         }
                         case 'HAIRCUT_LOGGED': {

@@ -41,6 +41,7 @@ export interface TodayServiceStatus {
 
 export interface TodayGuestActions {
     mealActionId?: string;
+    extraMealActionId?: string;
     showerActionId?: string;
     laundryActionId?: string;
     bicycleActionId?: string;
@@ -249,6 +250,9 @@ export function useTodayActionStatusMap(): ActionStatusMap {
             switch (action.type) {
                 case 'MEAL_ADDED':
                     if (!entry.mealActionId) entry.mealActionId = action.id;
+                    break;
+                case 'EXTRA_MEALS_ADDED':
+                    if (!entry.extraMealActionId) entry.extraMealActionId = action.id;
                     break;
                 case 'SHOWER_BOOKED':
                     if (!entry.showerActionId) entry.showerActionId = action.id;
